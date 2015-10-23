@@ -480,6 +480,18 @@ config CAVIUM_ERRATUM_27456
 endmenu
 
 
+config EL2_KERNEL
+	bool "Build EL2-only kernel"
+	select ARM64_4K_PAGES
+	depends on !CONFIG_KASAN
+	help
+	  Run the kernel only in EL2.  Warning: This may significantly reduce
+	  performance of regular userspace applications and should only be used
+	  when you stricly intend on running virtual machines on top of this
+	  kernel.  This kernel will only run as a KVM hypervisor and will not
+	  run on systems not booting the kernel in EL2 and will not run as a VM
+	  guest.
+
 choice
 	prompt "Page size"
 	default ARM64_4K_PAGES
@@ -500,6 +512,7 @@ config ARM64_16K_PAGES
 
 config ARM64_64K_PAGES
 	bool "64KB"
+	depends on !EL2_KERNEL
 	help
 	  This feature enables 64KB pages support (4KB by default)
 	  allowing only two levels of page tables and faster TLB
@@ -536,6 +549,7 @@ config ARM64_VA_BITS_47
 
 config ARM64_VA_BITS_48
 	bool "48-bit"
+	depends on !EL2_KERNEL
 
 endchoice
 
