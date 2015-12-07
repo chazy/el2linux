@@ -457,12 +457,14 @@ void __init mem_init(void)
 #undef MLM
 #undef MLK_ROUNDUP
 
+#ifndef CONFIG_EL2_KERNEL
 	/*
 	 * Check boundaries twice: Some fundamental inconsistencies can be
 	 * detected at build time already.
 	 */
 #ifdef CONFIG_COMPAT
 	BUILD_BUG_ON(TASK_SIZE_32			> TASK_SIZE_64);
+#endif
 #endif
 
 	/*

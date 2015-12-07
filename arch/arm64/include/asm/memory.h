@@ -64,8 +64,21 @@
  * TASK_UNMAPPED_BASE - the lower boundary of the mmap VM area.
  */
 #define VA_BITS			(CONFIG_ARM64_VA_BITS)
+#ifndef CONFIG_EL2_KERNEL
 #define VA_START		(UL(0xffffffffffffffff) << VA_BITS)
 #define PAGE_OFFSET		(UL(0xffffffffffffffff) << (VA_BITS - 1))
+#define TASK_SIZE_64		(UL(1) << VA_BITS)
+#else
+/*
+ * In EL2 we halve the lower part of the VA space so we split the VA space
+ * in half with userspace, and leeave the lower half of the kernel space for
+ * the vmalloc space.
+ */
+#define VA_START		(UL(0x1) << (VA_BITS - 1))
+#define PAGE_OFFSET		(VA_START + (VA_START >> 1))
+#define TASK_SIZE_64		VA_START
+#define EL1_VECTORS_VADDR	((UL(-1) << PAGE_SHIFT))
+#endif
 #define KIMAGE_VADDR		(MODULES_END)
 #define MODULES_END		(MODULES_VADDR + MODULES_VSIZE)
 #define MODULES_VADDR		(VA_START + KASAN_SHADOW_SIZE)
@@ -74,7 +87,6 @@
 #define PCI_IO_END		(VMEMMAP_START - SZ_2M)
 #define PCI_IO_START		(PCI_IO_END - PCI_IO_SIZE)
 #define FIXADDR_TOP		(PCI_IO_START - SZ_2M)
-#define TASK_SIZE_64		(UL(1) << VA_BITS)
 
 #ifdef CONFIG_COMPAT
 #define TASK_SIZE_32		UL(0x100000000)

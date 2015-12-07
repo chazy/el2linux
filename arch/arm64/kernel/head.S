@@ -52,6 +52,11 @@
 #error TEXT_OFFSET must be less than 2MB
 #endif
 
+#ifdef CONFIG_EL2_KERNEL
+#define IDMAP_TEXT_START __idmap_text_start
+#define IDMAP_TEXT_END __idmap_text_end
+#endif
+
 /*
  * Kernel startup entry point.
  * ---------------------------
@@ -265,6 +270,29 @@ ENDPROC(preserve_boot_args)
 	add	\tbl, \tbl, #PAGE_SIZE		// next level table page
 	.endm
 
+
+	// jump to skip_label if entry is already filled
+	// Returns:  tbl -> next level table page address
+	//          ntbl -> free idmap trampolien page address
+	.macro	create_table_entry_cond, tbl, ntbl, virt, shift, ptrs, tmp1, tmp2
+	lsr	\tmp1, \virt, #\shift
+	and	\tmp1, \tmp1, #\ptrs - 1	// table index
+	ldr	\tmp2, [\tbl, \tmp1, lsl #3]
+	cbz	\tmp2, 99f
+
+	 /* The _VA falls under an existing entry */
+	add	\tbl, \tbl, #PAGE_SIZE
+	b	98f
+
+	 /* The _VA falls under a blank entry */
+99:
+	orr	\tmp2, \ntbl, #PMD_TYPE_TABLE
+	str	\tmp2, [\tbl, \tmp1, lsl #3]
+	mov	\tbl, \ntbl
+	add	\ntbl, \ntbl, #PAGE_SIZE
+98:
+	.endm
+
 /*
  * Macro to populate the PGD (and possibily PUD) for the corresponding
  * block entry in the next level (tbl) for the given virtual address.
@@ -343,6 +371,7 @@ __create_page_tables:
 	mov	x0, x25				// idmap_pg_dir
 	adrp	x3, __idmap_text_start		// __pa(__idmap_text_start)
 
+	mov	x22, xzr
 #ifndef CONFIG_ARM64_VA_BITS_48
 #define EXTRA_SHIFT	(PGDIR_SHIFT + PAGE_SHIFT - 3)
 #define EXTRA_PTRS	(1 << (48 - EXTRA_SHIFT))
@@ -379,6 +408,7 @@ __create_page_tables:
 	dc	ivac, x6		// Invalidate potentially stale cache line
 
 	create_table_entry x0, x3, EXTRA_SHIFT, EXTRA_PTRS, x5, x6
+	mov	x22, #1
 1:
 #endif
 
@@ -386,6 +416,53 @@ __create_page_tables:
 	mov	x5, x3				// __pa(__idmap_text_start)
 	adr_l	x6, __idmap_text_end		// __pa(__idmap_text_end)
 	create_block_map x0, x7, x3, x5, x6
+
+#ifdef CONFIG_EL2_KERNEL
+	/*
+	 * Running in EL2 means we only have a single TTBR so we need a
+	 * trampoline mapping of the same page at the same VA in the idmap and
+	 * swapper page tables.
+	 */
+
+	/*
+	 * We use the idmap text region for this purpose and map it at the
+	 * same VA in the idmap pgtable as its going to be mapped in the
+	 * swapper pgtable.  If they overlap, that's fine, there's no more
+	 * work for us to do.
+	 */
+	ldr	x5, =IDMAP_TEXT_START		// __va(__idmap_text_start)
+
+	/*
+	 * Load the pointers to the idmap_pg_dir and the extra trampoline
+	 * pg_dirs we've reserved and let the conditional version of the
+	 * create_table_entry macro take care of business for us.
+	 */
+	mov	x0, x25				// idmap_pg_dir
+	adrp	x1, idmap_trampoline_pg_dir
+#ifndef CONFIG_ARM64_VA_BITS_48
+	cbz	x22, 1f		// no additional pgtable level
+
+	create_table_entry_cond x0, x1, x5, EXTRA_SHIFT, EXTRA_PTRS, x18, x19
+#endif
+1:
+	/*
+	 * Open-coded conditional version of create_pgd_entry
+	 */
+	create_table_entry_cond x0, x1, x5, PGDIR_SHIFT, PTRS_PER_PGD, x18, x19
+#if SWAPPER_PGTABLE_LEVELS == 3
+	create_table_entry_cond x0, x1, x5, TABLE_SHIFT, PTRS_PER_PTE, x18, x19
+#endif
+	adrp	x3, __idmap_text_start		// __pa(__idmap_text_start)
+	ldr	x6, =IDMAP_TEXT_END		// __va(__idmap_text_end)
+
+	/*
+	 * Create the block mapping of the idmap page at the idmap VA.
+	 * It's unlikely that the PA==VA of the idmap text region, but if
+	 * that's the case, then we're just setting an existing mapping to the
+	 * same value, which is not a problem.
+	 */
+	create_block_map x0, x7, x3, x5, x6
+#endif
 
 	/*
 	 * Map the kernel image (starting with PHYS_OFFSET).
@@ -478,6 +555,7 @@ ENTRY(kimage_vaddr)
  * booted in EL1 or EL2 respectively.
  */
 ENTRY(el2_setup)
+#ifndef CONFIG_EL2_KERNEL
 	mrs	x0, CurrentEL
 	cmp	x0, #CurrentEL_EL2
 	b.ne	1f
@@ -603,6 +681,10 @@ install_el2_stub:
 	msr	elr_el2, lr
 	mov	w20, #BOOT_CPU_MODE_EL2		// This CPU booted in EL2
 	eret
+#else /* CONFIG_EL2_KERNEL */
+	mov	w20, #BOOT_CPU_MODE_EL2		// This CPU booted in EL2
+	ret
+#endif
 ENDPROC(el2_setup)
 
 /*
@@ -731,10 +813,18 @@ ENTRY(__enable_mmu)
 	cmp	x2, #ID_AA64MMFR0_TGRAN_SUPPORTED
 	b.ne	__no_granule_support
 	update_early_cpu_boot_status 0, x1, x2
+#ifndef CONFIG_EL2_KERNEL
 	msr	ttbr0_el1, x25			// load TTBR0
 	msr	ttbr1_el1, x26			// load TTBR1
 	isb
 	msr	sctlr_el1, x0
+#else
+	ldr	x5, =vectors
+	msr	vbar_el2, x5
+	msr	ttbr0_el2, x25			// load idmap_pg_dir
+	isb
+	msr	sctlr_el2, x0
+#endif
 	isb
 	/*
 	 * Invalidate the local I-cache so that any instructions fetched
@@ -812,3 +902,28 @@ __secondary_switch:
 	ldr	x8, =__secondary_switched
 	br	x8
 ENDPROC(__secondary_switch)
+
+#ifdef CONFIG_EL2_KERNEL
+
+/*
+ * Switch from the idmap_pg_dir to the swapper_pgdir.
+ *
+ * x26 = physical address of swapper_pgdir
+ */
+__switch_mm:
+	msr	ttbr0_el2, x26			// load TTBR0
+	isb
+
+	/*
+	 * Flush the EL2 TLB entries in case the bootloader has configured a
+	 * page table that left stale entries in there.
+	 */
+	tlbi	alle2
+	ic	iallu
+	dsb	nsh
+	isb
+
+	br	x27
+ENDPROC(__switch_mm)
+
+#endif /* CONFIG_EL2_KERNEL */
