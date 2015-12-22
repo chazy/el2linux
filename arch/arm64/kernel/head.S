@@ -835,6 +835,19 @@ ENTRY(__enable_mmu)
 	ic	iallu
 	dsb	nsh
 	isb
+
+#ifdef CONFIG_EL2_KERNEL
+	/* jump to __switch_mm in shared mapping */
+	adrp	x18, __idmap_text_start		// __pa(__idmap_text_start)
+	adr_l	x19, __switch_mm		// __pa(__switch_mm)
+	sub	x18, x19, x18
+
+	ldr	x19, =IDMAP_TEXT_START		// __va(__idmap_text_start)
+	add	x19, x19, x18			// __va(switch_mm)
+
+	br	x19				// b __va(__switch_mm)
+#endif
+
 #ifdef CONFIG_RANDOMIZE_BASE
 	mov	x19, x0				// preserve new SCTLR_EL1 value
 	blr	x27
@@ -857,7 +870,7 @@ ENTRY(__enable_mmu)
 	dsb	nsh				// via old mapping
 	isb
 #endif
-	br	x27
+	br	x27	
 ENDPROC(__enable_mmu)
 
 __no_granule_support:
