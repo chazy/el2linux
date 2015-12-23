@@ -222,11 +222,27 @@ static void __init request_standard_resources(void)
 	}
 }
 
+static inline u64 read_current_el(void)
+{
+	u64 val;
+	asm("mrs	%0, CurrentEL": "=r" (val));
+	return val;
+}
+
 u64 __cpu_logical_map[NR_CPUS] = { [0 ... NR_CPUS-1] = INVALID_HWID };
 
 void __init setup_arch(char **cmdline_p)
 {
 	pr_info("Boot CPU: AArch64 Processor [%08x]\n", read_cpuid_id());
+
+	if (IS_ENABLED(CONFIG_EL2_KERNEL)) {
+		if (read_current_el() != CurrentEL_EL2) {
+			pr_crit("Error: EL2 Kernel not booted in EL2, stop\n");
+			while (true)
+				cpu_relax();
+		}
+		printk("EL2 Kernel boot CPU started in EL2\n");
+	}
 
 	sprintf(init_utsname()->machine, ELF_PLATFORM);
 	init_mm.start_code = (unsigned long) _text;
