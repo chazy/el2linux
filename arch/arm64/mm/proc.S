@@ -211,6 +211,9 @@ ENTRY(__cpu_setup)
 		     MAIR(0xff, MT_NORMAL) | \
 		     MAIR(0xbb, MT_NORMAL_WT)
 	msr	mair_el1, x5
+#ifdef CONFIG_EL2_KERNEL
+	msr	mair_el2, x5
+#endif
 	/*
 	 * Prepare SCTLR
 	 */
@@ -247,6 +250,9 @@ ENTRY(__cpu_setup)
 2:
 #endif	/* CONFIG_ARM64_HW_AFDBM */
 	msr	tcr_el1, x10
+#ifdef CONFIG_EL2_KERNEL
+	msr	tcr_el2, x10
+#endif
 	ret					// return to head.S
 ENDPROC(__cpu_setup)
 
