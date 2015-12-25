@@ -32,6 +32,19 @@
 #include <asm/thread_info.h>
 #include <asm/unistd.h>
 
+#ifndef CONFIG_EL2_KERNEL
+#define read_far_elx(__reg)	mrs	__reg, far_el1
+#else
+#define read_far_elx(__reg)	mrs	__reg, far_el2
+#endif
+
+#ifndef CONFIG_EL2_KERNEL
+#define read_esr_elx(__reg)	mrs	__reg, esr_el1
+#else
+#define read_esr_elx(__reg)	mrs	__reg, esr_el2
+#endif
+
+
 /*
  * Context tracking subsystem.  Used to instrument transitions
  * between user and kernel mode.
@@ -106,8 +119,13 @@
 	str	x20, [tsk, #TI_ADDR_LIMIT]
 	ALTERNATIVE(nop, SET_PSTATE_UAO(0), ARM64_HAS_UAO, CONFIG_ARM64_UAO)
 	.endif /* \el == 0 */
+#ifndef CONFIG_EL2_KERNEL
 	mrs	x22, elr_el1
 	mrs	x23, spsr_el1
+#else
+	mrs	x22, elr_el2
+	mrs	x23, spsr_el2
+#endif
 	stp	lr, x21, [sp, #S_LR]
 	stp	x22, x23, [sp, #S_PC]
 
@@ -168,8 +186,13 @@ alternative_else
 alternative_endif
 #endif
 	.endif
+#ifndef CONFIG_EL2_KERNEL
 	msr	elr_el1, x21			// set up the return data
 	msr	spsr_el1, x22
+#else
+	msr	elr_el2, x21			// set up the return data
+	msr	spsr_el2, x22
+#endif
 	ldp	x0, x1, [sp, #16 * 0]
 	ldp	x2, x3, [sp, #16 * 1]
 	ldp	x4, x5, [sp, #16 * 2]
@@ -297,7 +320,7 @@ END(vectors)
 	kernel_entry \el, \regsize
 	mov	x0, sp
 	mov	x1, #\reason
-	mrs	x2, esr_el1
+	read_esr_elx(x2)
 	b	bad_mode
 	.endm
 
@@ -349,7 +372,7 @@ ENDPROC(el1_error_invalid)
 	.align	6
 el1_sync:
 	kernel_entry 1
-	mrs	x1, esr_el1			// read the syndrome register
+	read_esr_elx(x1)			// read the syndrome register
 	lsr	x24, x1, #ESR_ELx_EC_SHIFT	// exception class
 	cmp	x24, #ESR_ELx_EC_DABT_CUR	// data abort in EL1
 	b.eq	el1_da
@@ -375,7 +398,7 @@ el1_da:
 	/*
 	 * Data abort handling
 	 */
-	mrs	x0, far_el1
+	read_far_elx(x0)
 	enable_dbg
 	// re-enable interrupts if they were enabled in the aborted context
 	tbnz	x23, #7, 1f			// PSR_I_BIT
@@ -391,7 +414,7 @@ el1_sp_pc:
 	/*
 	 * Stack or PC alignment exception handling
 	 */
-	mrs	x0, far_el1
+	read_far_elx(x0)
 	enable_dbg
 	mov	x2, sp
 	b	do_sp_pc_abort
@@ -409,7 +432,7 @@ el1_dbg:
 	cmp	x24, #ESR_ELx_EC_BRK64		// if BRK64
 	cinc	x24, x24, eq			// set bit '0'
 	tbz	x24, #0, el1_inv		// EL1 only
-	mrs	x0, far_el1
+	read_far_elx(x0)
 	mov	x2, sp				// struct pt_regs
 	bl	do_debug_exception
 	kernel_exit 1
@@ -461,7 +484,7 @@ el1_preempt:
 	.align	6
 el0_sync:
 	kernel_entry 0
-	mrs	x25, esr_el1			// read the syndrome register
+	read_esr_elx(x25)			// read the syndrome register
 	lsr	x24, x25, #ESR_ELx_EC_SHIFT	// exception class
 	cmp	x24, #ESR_ELx_EC_SVC64		// SVC in 64-bit state
 	b.eq	el0_svc
@@ -489,7 +512,7 @@ el0_sync:
 	.align	6
 el0_sync_compat:
 	kernel_entry 0, 32
-	mrs	x25, esr_el1			// read the syndrome register
+	read_esr_elx(x25)			// read the syndrome register
 	lsr	x24, x25, #ESR_ELx_EC_SHIFT	// exception class
 	cmp	x24, #ESR_ELx_EC_SVC32		// SVC in 32-bit state
 	b.eq	el0_svc_compat
@@ -537,7 +560,7 @@ el0_da:
 	/*
 	 * Data abort handling
 	 */
-	mrs	x26, far_el1
+	read_far_elx(x26)
 	// enable interrupts before calling the main handler
 	enable_dbg_and_irq
 	ct_user_exit
@@ -550,7 +573,7 @@ el0_ia:
 	/*
 	 * Instruction abort handling
 	 */
-	mrs	x26, far_el1
+	read_far_elx(x26)
 	// enable interrupts before calling the main handler
 	enable_dbg_and_irq
 	ct_user_exit
@@ -583,7 +606,7 @@ el0_sp_pc:
 	/*
 	 * Stack or PC alignment exception handling
 	 */
-	mrs	x26, far_el1
+	read_far_elx(x26)
 	// enable interrupts before calling the main handler
 	enable_dbg_and_irq
 	ct_user_exit
@@ -617,7 +640,7 @@ el0_dbg:
 	 * Debug exception handling
 	 */
 	tbnz	x24, #0, el0_inv		// EL0 only
-	mrs	x0, far_el1
+	read_far_elx(x0)
 	mov	x1, x25
 	mov	x2, sp
 	bl	do_debug_exception
