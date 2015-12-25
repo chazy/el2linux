@@ -24,9 +24,11 @@
 #include <asm/asm-offsets.h>
 #include <asm/hwcap.h>
 #include <asm/pgtable.h>
+
 #include <asm/pgtable-hwdef.h>
 #include <asm/cpufeature.h>
 #include <asm/alternative.h>
+#include <asm/kvm_arm.h>
 
 #ifdef CONFIG_ARM64_64K_PAGES
 #define TCR_TG_FLAGS	TCR_TG0_64K | TCR_TG1_64K
@@ -251,7 +253,53 @@ ENTRY(__cpu_setup)
 #endif	/* CONFIG_ARM64_HW_AFDBM */
 	msr	tcr_el1, x10
 #ifdef CONFIG_EL2_KERNEL
+	mrs	x9, ID_AA64MMFR0_EL1
+	bfi	x10, x9, #16, #3
 	msr	tcr_el2, x10
+
+	/*
+	 * We need to configure the HCR to run Linux in EL2. Specificially we
+	 * set the following bits:
+	 *
+	 * HCR.RW = 1 (assume AArch64 userspace for now)
+	 * HCR.HCD = 0 (disable hypercalls)
+	 * HCR.TDZ = RAW (TODO: Find out)
+	 * HCR.TGE = 0 (do not trap general exceptions, forces EL1/0 MMU off)
+	 * HCR.TPU = RAW (TODO: Find out)
+	 * HCR.PTC = RAW (TODO: Find out)
+	 * HCR.TID2 = RAW (TODO: Fint out)
+	 * HCR.TID0 = RAW (TODO: Find out)
+	 * HCR.TWE = RAW (TODO: Find out)
+	 * HCR.TWI = RAW (TODO: Find out)
+	 * HCR.DC = 0 (we must be able to use the MMU in EL0)
+	 * HCR.BSU = 0
+	 * HCR.VSE = 0 (defined as HCR_VA)
+	 * HCR.VI = 0
+	 * HCR.VF = 0
+	 * HCR.AMO = 1
+	 * HCR.IMO = 1
+	 * HCR.FMO = 1
+	 * HCR.VM = 0
+	 */
+	mrs	x10, hcr_el2
+	ldr	x9, =HCR_HCD | HCR_DC | HCR_BSU | HCR_VA | HCR_VI | \
+		      HCR_VF | HCR_VM | HCR_TGE
+	bic	x10, x10, x9
+	ldr	x9, =HCR_RW | HCR_AMO | HCR_IMO | HCR_FMO
+	orr	x10, x10, x9
+	msr	hcr_el2, x10
+
+	/* Make sure we use VMID 0 for userspace mappings */
+	msr	vttbr_el2, xzr
+
+	/*
+	 * Configre VTCR to something sane although we leave it up to KVM to
+	 * configure all this needed for Stage-2 translations.
+	 */
+	ldr	x10, =VTCR_EL2_FLAGS
+	mrs	x9, ID_AA64MMFR0_EL1
+	bfi	x10, x9, #16, #3
+	msr	vtcr_el2, x10
 #endif
 	ret					// return to head.S
 ENDPROC(__cpu_setup)
