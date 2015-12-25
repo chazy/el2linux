@@ -18,7 +18,11 @@
 
 static inline void set_my_cpu_offset(unsigned long off)
 {
+#ifndef CONFIG_EL2_KERNEL
 	asm volatile("msr tpidr_el1, %0" :: "r" (off) : "memory");
+#else
+	asm volatile("msr tpidr_el2, %0" :: "r" (off) : "memory");
+#endif
 }
 
 static inline unsigned long __my_cpu_offset(void)
@@ -29,8 +33,13 @@ static inline unsigned long __my_cpu_offset(void)
 	 * We want to allow caching the value, so avoid using volatile and
 	 * instead use a fake stack read to hazard against barrier().
 	 */
+#ifndef CONFIG_EL2_KERNEL
 	asm("mrs %0, tpidr_el1" : "=r" (off) :
 		"Q" (*(const unsigned long *)current_stack_pointer));
+#else
+	asm("mrs %0, tpidr_el2" : "=r" (off) :
+		"Q" (*(const unsigned long *)current_stack_pointer));
+#endif
 
 	return off;
 }
