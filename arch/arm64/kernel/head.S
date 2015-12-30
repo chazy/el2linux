@@ -823,6 +823,7 @@ ENTRY(__enable_mmu)
 	msr	vbar_el2, x5
 	msr	ttbr0_el2, x25			// load idmap_pg_dir
 	isb
+	msr	sctlr_el1, x0
 	msr	sctlr_el2, x0
 #endif
 	isb
