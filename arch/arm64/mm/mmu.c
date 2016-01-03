@@ -505,7 +505,9 @@ void __init paging_init(void)
 		      SWAPPER_DIR_SIZE - PAGE_SIZE);
 
 	cpu_set_reserved_ttbr0();
-
+#ifdef CONFIG_EL2_KERNEL
+	cpu_set_reserved_ttbr1();
+#endif
 	local_flush_tlb_all();
 }
 

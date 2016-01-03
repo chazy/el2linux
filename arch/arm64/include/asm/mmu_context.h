@@ -58,6 +58,19 @@ static inline void cpu_set_reserved_ttbr0(void)
 	: "r" (ttbr));
 }
 
+#ifdef CONFIG_EL2_KERNEL
+static inline void cpu_set_reserved_ttbr1(void)
+{
+	unsigned long ttbr = virt_to_phys(empty_zero_page);
+
+	asm(
+	"	msr	ttbr1_el1, %0			// set TTBR1_EL1\n"
+	"	isb"
+	:
+	: "r" (ttbr));
+}
+#endif
+
 /*
  * TCR.T0SZ value to use when the ID map is active. Usually equals
  * TCR_T0SZ(VA_BITS), unless system RAM is positioned very high in
