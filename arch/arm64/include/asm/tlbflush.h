@@ -75,6 +75,9 @@ static inline void flush_tlb_all(void)
 {
 	dsb(ishst);
 	asm("tlbi	vmalle1is");
+#ifdef CONFIG_EL2_KERNEL
+	asm("tlbi	alle2is");
+#endif
 	dsb(ish);
 	isb();
 }
@@ -95,6 +98,9 @@ static inline void flush_tlb_page(struct vm_area_struct *vma,
 
 	dsb(ishst);
 	asm("tlbi	vale1is, %0" : : "r" (addr));
+#ifdef CONFIG_EL2_KERNEL
+	asm("tlbi	vale2is, %0" : : "r" (addr));
+#endif
 	dsb(ish);
 }
 
@@ -121,10 +127,17 @@ static inline void __flush_tlb_range(struct vm_area_struct *vma,
 
 	dsb(ishst);
 	for (addr = start; addr < end; addr += 1 << (PAGE_SHIFT - 12)) {
-		if (last_level)
+		if (last_level) {
 			asm("tlbi vale1is, %0" : : "r"(addr));
-		else
+#ifdef CONFIG_EL2_KERNEL
+			asm("tlbi vale2is, %0" : : "r"(addr));
+#endif
+		} else {
 			asm("tlbi vae1is, %0" : : "r"(addr));
+#ifdef CONFIG_EL2_KERNEL
+			asm("tlbi vae2is, %0" : : "r"(addr));
+#endif
+		}
 	}
 	dsb(ish);
 }
@@ -148,8 +161,12 @@ static inline void flush_tlb_kernel_range(unsigned long start, unsigned long end
 	end >>= 12;
 
 	dsb(ishst);
-	for (addr = start; addr < end; addr += 1 << (PAGE_SHIFT - 12))
+	for (addr = start; addr < end; addr += 1 << (PAGE_SHIFT - 12)) {
 		asm("tlbi vaae1is, %0" : : "r"(addr));
+#ifdef CONFIG_EL2_KERNEL
+		asm("tlbi vae2is, %0" : : "r"(addr));
+#endif
+	}
 	dsb(ish);
 	isb();
 }
@@ -164,6 +181,9 @@ static inline void __flush_tlb_pgtable(struct mm_struct *mm,
 	unsigned long addr = uaddr >> 12 | (ASID(mm) << 48);
 
 	asm("tlbi	vae1is, %0" : : "r" (addr));
+#ifdef CONFIG_EL2_KERNEL
+	asm("tlbi	vae2is, %0" : : "r" (addr));
+#endif
 	dsb(ish);
 }
 
