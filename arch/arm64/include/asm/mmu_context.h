@@ -88,6 +88,17 @@ static inline void __cpu_set_tcr_t0sz(unsigned long t0sz)
 	"	isb"
 	: "=&r" (tcr)
 	: "r"(t0sz), "I"(TCR_T0SZ_OFFSET), "I"(TCR_TxSZ_WIDTH));
+
+#ifdef CONFIG_EL2_KERNEL
+	asm volatile (
+	"	mrs	%0, tcr_el2	;"
+	"	bfi	%0, %1, %2, %3	;"
+	"	msr	tcr_el2, %0	;"
+	"	isb"
+	: "=&r" (tcr)
+	: "r"(TCR_T0SZ(VA_BITS)), "I"(TCR_T0SZ_OFFSET), "I"(TCR_TxSZ_WIDTH));
+#endif
+
 }
 
 #define cpu_set_default_tcr_t0sz()	__cpu_set_tcr_t0sz(TCR_T0SZ(VA_BITS))
