@@ -123,6 +123,11 @@
 	mrs	x22, elr_el1
 	mrs	x23, spsr_el1
 #else
+	.if	\el == 0
+	mrs	x22, hcr_el2
+	orr	x22, x22, #(1 << 4)		// HCR_EL2.IMO
+	msr	hcr_el2, x22
+	.endif
 	mrs	x22, elr_el2
 	mrs	x23, spsr_el2
 #endif
@@ -192,6 +197,11 @@ alternative_endif
 #else
 	msr	elr_el2, x21			// set up the return data
 	msr	spsr_el2, x22
+	.if	\el == 0
+	mrs	x21, hcr_el2
+	bic	x21, x21, #(1 << 4)		// HCR_EL2.IMO
+	msr	hcr_el2, x21
+	.endif
 #endif
 	ldp	x0, x1, [sp, #16 * 0]
 	ldp	x2, x3, [sp, #16 * 1]
@@ -485,6 +495,7 @@ el1_preempt:
 el0_sync:
 	kernel_entry 0
 	read_esr_elx(x25)			// read the syndrome register
+el0_sync_postentry:
 	lsr	x24, x25, #ESR_ELx_EC_SHIFT	// exception class
 	cmp	x24, #ESR_ELx_EC_SVC64		// SVC in 64-bit state
 	b.eq	el0_svc
@@ -506,6 +517,10 @@ el0_sync:
 	b.eq	el0_undef
 	cmp	x24, #ESR_ELx_EC_BREAKPT_LOW	// debug exception in EL0
 	b.ge	el0_dbg
+#ifdef CONFIG_EL2_KERNEL
+	cmp	x24, #ESR_ELx_EC_HVC64		// HVC from EL1 shim or KVM
+	b.ge	el_lower_hvc			// guest
+#endif
 	b	el0_inv
 
 #ifdef CONFIG_COMPAT
@@ -647,6 +662,39 @@ el0_dbg:
 	enable_dbg
 	ct_user_exit
 	b	ret_to_user
+#ifdef CONFIG_EL2_KERNEL
+el_lower_hvc:
+	and	x24, x23, #PSR_MODE_MASK
+	cmp	x24, #PSR_MODE_EL2h
+	b.ge	el1_shim_invalid
+	mrs	x24, vttbr_el2
+	lsr	x24, x24, #48
+	cbnz	x24, el1_shim_invalid		// invalid if vmid != 0
+	mrs	x22, elr_el1
+	mrs	x23, spsr_el1
+	stp	x22, x23, [sp, #S_PC]		// store ELR and SPSR in pt_regs
+	and	x24, x25, #ESR_ELx_xVC_IMM_MASK
+	cmp	x24, #0
+	b.eq	el1_shim_sync
+	cmp	x24, #1
+	b.eq	el1_shim_irq
+	b	el1_shim_invalid
+
+el1_shim_sync:
+	mrs	x24, far_el1			// TODO: Maybe only do this for
+	msr	far_el2, x24			// aborts?
+	mrs	x25, esr_el1
+	b	el0_sync_postentry		// process the real exception
+
+el1_shim_irq:
+	b	el0_irq_naked
+
+el1_shim_invalid:
+	mov	x0, sp				// Synchronous exception from
+	mov	x1, #BAD_SYNC			// EL2 is an error
+	mov	x2, x25
+	b	bad_mode_panic
+#endif
 el0_inv:
 	enable_dbg
 	ct_user_exit
@@ -839,3 +887,105 @@ ENTRY(sys_rt_sigreturn_wrapper)
 	mov	x0, sp
 	b	sys_rt_sigreturn
 ENDPROC(sys_rt_sigreturn_wrapper)
+
+#ifdef CONFIG_EL2_KERNEL
+
+	.pushsection .el1_shim.text, "ax"
+
+/*
+ * EL1 Shim Exception vectors.
+ */
+
+	.align	11
+ENTRY(el1_shim_vectors)
+	ventry	el1_shim_sync_invalid		// Synchronous EL1t
+	ventry	el1_shim_irq_invalid		// IRQ EL1t
+	ventry	el1_shim_fiq_invalid		// FIQ EL1t
+	ventry	el1_shim_error_invalid		// Error EL1t
+
+	ventry	el1_shim_sync_invalid		// Synchronous EL1h
+	ventry	el1_shim_irq_invalid		// IRQ EL1h
+	ventry	el1_shim_fiq_invalid		// FIQ EL1h
+	ventry	el1_shim_error_invalid		// Error EL1h
+
+	ventry	el0_shim_sync			// Synchronous 64-bit EL0
+	ventry	el0_shim_irq			// IRQ 64-bit EL0
+	ventry	el0_shim_irq_invalid		// IRQ 64-bit EL0
+	ventry	el0_shim_fiq_invalid		// FIQ 64-bit EL0
+	ventry	el0_shim_error_invalid		// Error 64-bit EL0
+
+#ifdef CONFIG_COMPAT
+	ventry	el0_shim_sync_compat		// Synchronous 32-bit EL0
+	ventry	el0_shim_irq_compat		// IRQ 32-bit EL0
+	ventry	el0_shim_irq_invalid		// IRQ 64-bit EL0
+	ventry	el0_shim_fiq_invalid		// FIQ 32-bit EL0
+	ventry	el0_shim_error_invalid		// Error 32-bit EL0
+#else
+	ventry	el0_shim_sync_invalid		// Synchronous 32-bit EL0
+	ventry	el0_shim_irq_invalid		// IRQ 32-bit EL0
+	ventry	el0_shim_fiq_invalid		// FIQ 32-bit EL0
+	ventry	el0_shim_error_invalid		// Error 32-bit EL0
+#endif
+END(el1_shim_vectors)
+
+/*
+ * Invalid mode handlers
+ */
+	.macro	invalid_shim_entry reason
+	hvc	#\reason
+	.endm
+
+	.macro	valid_shim_entry type
+	hvc	\type
+	.endm
+
+el0_shim_sync:
+	valid_shim_entry #0
+ENDPROC(el0_shim_sync)
+
+el0_shim_sync_compat:
+	valid_shim_entry #0
+ENDPROC(el0_shim_sync_compat)
+
+el1_shim_sync_invalid:
+	invalid_shim_entry 1
+ENDPROC(el1_shim_sync_invalid)
+
+el1_shim_irq_invalid:
+	invalid_shim_entry 2
+ENDPROC(el1_shim_irq_invalid)
+
+el1_shim_fiq_invalid:
+	invalid_shim_entry 3
+ENDPROC(el1_shim_fiq_invalid)
+
+el1_shim_error_invalid:
+	invalid_shim_entry 4
+ENDPROC(el1_shim_error_invalid)
+
+el0_shim_irq:
+	valid_shim_entry #1
+ENDPROC(el0_shim_irq)
+
+el0_shim_irq_compat:
+	valid_shim_entry #1
+ENDPROC(el0_shim_irq_compat)
+
+el0_shim_irq_invalid:
+	invalid_shim_entry 5
+ENDPROC(el0_shim_irq_invalid)
+
+el0_shim_fiq_invalid:
+	invalid_shim_entry 6
+ENDPROC(el0_shim_fiq_invalid)
+
+el0_shim_error_invalid:
+	invalid_shim_entry 7
+ENDPROC(el0_shim_error_invalid)
+
+el0_shim_sync_invalid:
+	invalid_shim_entry 8
+ENDPROC(el0_shim_sync_invalid)
+
+.popsection
+#endif /* CONFIG_EL2_KERNEL */

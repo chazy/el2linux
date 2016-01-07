@@ -58,6 +58,7 @@
 #define PAGE_KERNEL_USER_XN	PTE_UXN
 #else
 #define PAGE_KERNEL_USER_XN	0
+#define PAGE_KERNEL_EXEC_EL1	__pgprot(_PAGE_DEFAULT | PTE_UXN | PTE_DIRTY | PTE_WRITE)
 #endif
 
 #define PAGE_HYP		__pgprot(_PAGE_DEFAULT | PTE_HYP | PTE_HYP_XN)

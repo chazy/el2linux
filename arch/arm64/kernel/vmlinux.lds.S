@@ -40,6 +40,14 @@ jiffies = jiffies_64;
 	*(.hyp.text)					\
 	VMLINUX_SYMBOL(__hyp_text_end) = .;
 
+#ifdef CONFIG_EL2_KERNEL
+#define EL1_SHIM_TEXT					\
+	. = ALIGN(SZ_4K);				\
+	VMLINUX_SYMBOL(__el1_shim_vectors_start) = .;	\
+	*(.el1_shim.text)				\
+	VMLINUX_SYMBOL(__el1_shim_vectors_end) = .;
+#endif
+
 #define IDMAP_TEXT					\
 	. = ALIGN(SZ_4K);				\
 	VMLINUX_SYMBOL(__idmap_text_start) = .;		\
@@ -127,6 +135,9 @@ SECTIONS
 			HYPERVISOR_TEXT
 			IDMAP_TEXT
 			HIBERNATE_TEXT
+#ifdef CONFIG_EL2_KERNEL
+			EL1_SHIM_TEXT
+#endif
 			*(.fixup)
 			*(.gnu.warning)
 		. = ALIGN(16);

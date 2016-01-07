@@ -578,6 +578,12 @@ asmlinkage void bad_mode(struct pt_regs *regs, int reason, unsigned int esr)
 	arm64_notify_die("Oops - bad mode", regs, &info, 0);
 }
 
+asmlinkage void bad_mode_panic(struct pt_regs *regs, int reason, unsigned int esr)
+{
+	bad_mode(regs, reason, esr);
+	panic("unrecoverable bad mode detected");
+}
+
 void __pte_error(const char *file, int line, unsigned long val)
 {
 	pr_err("%s:%d: bad pte %016lx.\n", file, line, val);
