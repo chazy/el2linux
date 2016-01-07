@@ -30,12 +30,31 @@
 
 static struct kmem_cache *pgd_cache;
 
+#ifdef CONFIG_EL2_KERNEL
+static void copy_kernel_pgd_entries(pgd_t *new_pgd)
+{
+	pgd_t *init_pgd;
+
+	init_pgd = pgd_offset_k(0);
+	memcpy(new_pgd + USER_PTRS_PER_PGD, init_pgd + USER_PTRS_PER_PGD,
+	       (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+}
+#else
+static void copy_kernel_pgd_entries(pgd_t *new_pgd) { }
+#endif
+
 pgd_t *pgd_alloc(struct mm_struct *mm)
 {
+	pgd_t *pgd;
+
 	if (PGD_SIZE == PAGE_SIZE)
-		return (pgd_t *)__get_free_page(PGALLOC_GFP);
+		pgd = (pgd_t *)__get_free_page(PGALLOC_GFP);
 	else
-		return kmem_cache_alloc(pgd_cache, PGALLOC_GFP);
+		pgd = kmem_cache_alloc(pgd_cache, PGALLOC_GFP);
+
+	if (pgd)
+		copy_kernel_pgd_entries(pgd);
+	return pgd;
 }
 
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)

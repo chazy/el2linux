@@ -80,6 +80,11 @@
 #define PGDIR_MASK		(~(PGDIR_SIZE-1))
 #define PTRS_PER_PGD		(1 << (VA_BITS - PGDIR_SHIFT))
 
+#ifdef CONFIG_EL2_KERNEL
+#define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
+#endif
+
+
 /*
  * Section address mask and size definitions.
  */
