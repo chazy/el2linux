@@ -225,6 +225,12 @@ asmlinkage void secondary_start_kernel(void)
 	 */
 	cpu_uninstall_idmap();
 
+	/*
+	 * If running the kernel in EL2 we have to set the TTBR1_EL1 for
+	 * routing exceptions to EL2 via EL1.
+	 */
+	cpu_init_el1_entry();
+
 	preempt_disable();
 	trace_hardirqs_off();
 

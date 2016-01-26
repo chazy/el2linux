@@ -41,6 +41,7 @@
 #include <asm/tlb.h>
 #include <asm/memblock.h>
 #include <asm/mmu_context.h>
+#include <asm/virt.h>
 
 #include "mm.h"
 
@@ -502,6 +503,16 @@ void __init paging_init(void)
 	 */
 	memblock_free(__pa(swapper_pg_dir) + PAGE_SIZE,
 		      SWAPPER_DIR_SIZE - PAGE_SIZE);
+
+	cpu_set_reserved_ttbr0();
+
+	/*
+	 * If running the kernel in EL2 we have to set the TTBR1_EL1 for
+	 * routing exceptions to EL2 via EL1.
+	 */
+	el1_shim_vectors_init();
+
+	local_flush_tlb_all();
 }
 
 /*

@@ -57,6 +57,14 @@
  */
 extern u32 __boot_cpu_mode[2];
 
+#ifdef CONFIG_EL2_KERNEL
+extern void el1_shim_vectors_init(void);
+extern void cpu_init_el1_entry(void);
+#else
+static inline void el1_shim_vectors_init(void) { }
+static inline void cpu_init_el1_entry(void) { }
+#endif
+
 void __hyp_set_vectors(phys_addr_t phys_vector_base);
 phys_addr_t __hyp_get_vectors(void);
 

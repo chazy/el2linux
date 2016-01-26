@@ -26,6 +26,7 @@
 
 #include <asm/cacheflush.h>
 #include <asm/pgalloc.h>
+#include <asm/virt.h>
 
 extern char el1_shim_vectors[];
 extern char __el1_shim_vectors_start[], __el1_shim_vectors_end[];
@@ -44,9 +45,13 @@ struct el1_entry_info {
 	phys_addr_t pgd_phys;
 };
 
-static void cpu_init_el1_entry(void *data)
+static struct el1_entry_info el1_entry_info;
+
+void cpu_init_el1_entry(void)
 {
-	struct el1_entry_info *info = (struct el1_entry_info *)data;
+	struct el1_entry_info *info = &el1_entry_info;
+
+	BUG_ON(preemptible());
 
 	/* Set the TTBR1_EL1 to the EL1 shim PGD */
 	asm volatile("msr ttbr1_el1, %0": : "r" (info->pgd_phys));
@@ -55,13 +60,12 @@ static void cpu_init_el1_entry(void *data)
 	asm volatile("msr vbar_el1, %0": : "r" (info->vbar_el1));
 }
 
-static int el1_shim_vectors_init(void)
+void el1_shim_vectors_init(void)
 {
 	unsigned long start = (unsigned long)&__el1_shim_vectors_start;
 	unsigned long end = ((unsigned long)&__el1_shim_vectors_end) - 1;
 	unsigned long addr = EL1_VECTORS_VADDR;
 	unsigned long kaddr;
-	struct el1_entry_info el1_info;
 	struct page *page;
 	phys_addr_t phys;
 	pgd_t *pgd;
@@ -92,15 +96,12 @@ static int el1_shim_vectors_init(void)
 	/*
 	 * Configure the EL1 exception entry on each CPU.
 	 */
-	el1_info.pgd_phys = virt_to_phys(el1_shim_pgd);
+	el1_entry_info.pgd_phys = virt_to_phys(el1_shim_pgd);
 	kaddr = (unsigned long)el1_shim_vectors;
-	el1_info.vbar_el1 = EL1_VECTORS_VADDR + (kaddr & ~PAGE_MASK);
-	on_each_cpu(cpu_init_el1_entry, &el1_info, 0);
+	el1_entry_info.vbar_el1 = EL1_VECTORS_VADDR + (kaddr & ~PAGE_MASK);
+	cpu_init_el1_entry();
 
 
 	/* TODO: Not sure if this is needed? */
 	flush_icache_range(addr, addr + PAGE_SIZE);
-
-	return 0;
 }
-arch_initcall(el1_shim_vectors_init);
