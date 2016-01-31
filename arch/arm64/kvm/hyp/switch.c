@@ -57,6 +57,10 @@ static void __hyp_text __activate_traps_nvhe(void)
 	val = CPTR_EL2_DEFAULT;
 	val |= CPTR_EL2_TTA | CPTR_EL2_TFP;
 	write_sysreg(val, cptr_el2);
+
+#ifdef CONFIG_EL2_KERNEL
+	write_sysreg(__kvm_hyp_vector, vbar_el2);
+#endif
 }
 
 static hyp_alternate_select(__activate_traps_arch,
@@ -99,7 +103,13 @@ static void __hyp_text __deactivate_traps_vhe(void)
 
 static void __hyp_text __deactivate_traps_nvhe(void)
 {
-	write_sysreg(HCR_RW, hcr_el2);
+#ifdef CONFIG_EL2_KERNEL
+	extern char vectors[];	/* kernel exception vectors */
+
+	write_sysreg(vectors, vbar_el2);
+#endif
+
+	write_sysreg(EL2_HOST_HCR, hcr_el2);
 	write_sysreg(CPTR_EL2_DEFAULT, cptr_el2);
 }
 
