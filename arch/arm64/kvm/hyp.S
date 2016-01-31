@@ -41,7 +41,8 @@
  * HVC behaves as a 'bl' call and will clobber lr.
  */
 ENTRY(__kvm_call_hyp)
-alternative_if_not ARM64_HAS_VIRT_HOST_EXTN
+#ifndef CONFIG_EL2_KERNEL
+alternative_if_not ARM64_HAS_VIRT_HOST_EXTN	
 	str     lr, [sp, #-16]!
 	hvc	#0
 	ldr     lr, [sp], #16
@@ -52,4 +53,8 @@ alternative_else
 	nop
 	nop
 alternative_endif
+#else
+	b	__vhe_hyp_call
+	nop
+#endif
 ENDPROC(__kvm_call_hyp)
