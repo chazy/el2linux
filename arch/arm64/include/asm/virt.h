@@ -42,6 +42,38 @@
 #define BOOT_CPU_MODE_EL1	(0xe11)
 #define BOOT_CPU_MODE_EL2	(0xe12)
 
+
+#ifndef CONFIG_EL2_KERNEL
+#define EL2_HOST_HCR	HCR_RW
+#else
+/*
+ * We need to configure the HCR to run Linux in EL2. Specificially we
+ * set the following bits:
+ *
+ * HCR.RW = 1 (assume AArch64 userspace for now)
+ * HCR.HCD = 0 (disable hypercalls)
+ * HCR.TDZ = 0 (allow EL0 to do DC)
+ * HCR.TGE = 0 (do not trap general exceptions, forces EL1/0 MMU off)
+ * HCR.TPU = 0
+ * HCR.TPC = 0
+ * HCR.TID2 = 0
+ * HCR.TID1 = 0
+ * HCR.TID0 = 0
+ * HCR.TWE = 0 (EL1 kernels allow EL0 execution of WFE)
+ * HCR.TWI = 0 (EL1 kernels allow EL0 execution of WFI)
+ * HCR.DC = 0 (we must be able to use the MMU in EL0)
+ * HCR.BSU = 0
+ * HCR.VSE = 0 (defined as HCR_VA)
+ * HCR.VI = 0
+ * HCR.VF = 0
+ * HCR.AMO = 1
+ * HCR.IMO = 1
+ * HCR.FMO = 1
+ * HCR.VM = 0
+ */
+#define EL2_HOST_HCR	(HCR_RW | HCR_AMO | HCR_IMO | HCR_FMO)
+#endif
+
 #ifndef __ASSEMBLY__
 
 #include <asm/ptrace.h>
