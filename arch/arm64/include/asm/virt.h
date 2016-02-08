@@ -131,6 +131,18 @@ static inline void verify_cpu_run_el(void) {}
 extern char __hyp_idmap_text_start[];
 extern char __hyp_idmap_text_end[];
 
+static inline bool is_vhe_present(void)
+{
+#ifdef CONFIG_EL2_KERNEL
+	return false;
+#else
+	u64 mmfr1;
+
+	asm("mrs %0, id_aa64mmfr1_el1" : "=r" (mmfr1));
+	return (((mmfr1 >> 8) & 0xf) == 0x1);
+#endif
+}
+
 /* The section containing the hypervisor text */
 extern char __hyp_text_start[];
 extern char __hyp_text_end[];
