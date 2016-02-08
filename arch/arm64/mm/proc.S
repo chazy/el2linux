@@ -134,8 +134,12 @@ ENDPROC(cpu_do_resume)
  */
 ENTRY(cpu_do_switch_mm)
 	mmid	x1, x1				// get mm->context.id
+#ifdef CONFIG_EL2_KERNEL
+	msr	ttbr0_el2, x0			// set TTBR0_EL2
+	tlbi	alle2
+#endif
 	bfi	x0, x1, #48, #16		// set the ASID
-	msr	ttbr0_el1, x0			// set TTBR0
+	msr	ttbr0_el1, x0			// set TTBR0_EL1
 	isb
 alternative_if_not ARM64_WORKAROUND_CAVIUM_27456
 	ret
