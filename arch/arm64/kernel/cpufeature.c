@@ -721,9 +721,14 @@ static bool has_no_hw_prefetch(const struct arm64_cpu_capabilities *entry, int _
 	return MIDR_IS_CPU_MODEL_RANGE(midr, MIDR_THUNDERX, rv_min, rv_max);
 }
 
-static bool vhe_present_and_active(const struct arm64_cpu_capabilities *entry)
+static bool vhe_present_and_active(const struct arm64_cpu_capabilities *entry, int __unused)
 {
 	return is_kernel_in_hyp_mode() && is_vhe_present();
+}
+
+static bool runs_at_el2(const struct arm64_cpu_capabilities *entry, int __unused)
+{
+	return is_kernel_in_hyp_mode();
 }
 
 static bool hyp_offset_low(const struct arm64_cpu_capabilities *entry,
@@ -805,6 +810,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.capability = ARM64_HAS_VIRT_HOST_EXTN,
 		.def_scope = SCOPE_SYSTEM,
 		.matches = vhe_present_and_active,
+
 	},
 	{
 		.desc = "32-bit EL0 Support",
@@ -821,6 +827,11 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.capability = ARM64_HYP_OFFSET_LOW,
 		.def_scope = SCOPE_SYSTEM,
 		.matches = hyp_offset_low,
+	},
+	{
+		.desc = "Runs at EL2",
+		.capability = ARM64_RUNS_AT_EL2,
+		.matches = runs_at_el2,
 	},
 	{},
 };
