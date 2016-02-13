@@ -239,6 +239,11 @@ static int __hyp_text __guest_run(struct kvm_vcpu *vcpu)
 	bool fp_enabled;
 	u64 exit_code;
 
+#ifdef CONFIG_EL2_KERNEL
+	unsigned long host_tpidr_el2;
+
+	host_tpidr_el2 = read_sysreg(tpidr_el2);
+#endif
 	vcpu = kern_hyp_va(vcpu);
 	write_sysreg(vcpu, tpidr_el2);
 
@@ -269,6 +274,10 @@ again:
 
 	if (exit_code == ARM_EXCEPTION_TRAP && !__populate_fault_info(vcpu))
 		goto again;
+
+#ifdef CONFIG_EL2_KERNEL
+	write_sysreg(host_tpidr_el2, tpidr_el2);
+#endif
 
 	fp_enabled = __fpsimd_enabled();
 
