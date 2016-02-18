@@ -67,6 +67,9 @@ static inline void local_flush_tlb_all(void)
 {
 	dsb(nshst);
 	asm("tlbi	vmalle1");
+#ifdef CONFIG_EL2_KERNEL
+	asm("tlbi	alle2");
+#endif
 	dsb(nsh);
 	isb();
 }
@@ -88,6 +91,9 @@ static inline void flush_tlb_mm(struct mm_struct *mm)
 
 	dsb(ishst);
 	asm("tlbi	aside1is, %0" : : "r" (asid));
+#ifdef CONFIG_EL2_KERNEL
+	asm("tlbi	alle2is");
+#endif
 	dsb(ish);
 }
 
