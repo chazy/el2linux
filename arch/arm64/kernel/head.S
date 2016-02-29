@@ -447,10 +447,13 @@ __create_page_tables:
 1:
 	/*
 	 * Open-coded conditional version of create_pgd_entry
+	 * (we don't have to consider adding in the PUD level, because that's
+	 * only relevant for 16K pages with 48 bits, and 16K pages is not
+	 * supported with EL2 kernels yet).
 	 */
 	create_table_entry_cond x0, x1, x5, PGDIR_SHIFT, PTRS_PER_PGD, x18, x19
 #if SWAPPER_PGTABLE_LEVELS == 3
-	create_table_entry_cond x0, x1, x5, TABLE_SHIFT, PTRS_PER_PTE, x18, x19
+	create_table_entry_cond x0, x1, x5, SWAPPER_TABLE_SHIFT, PTRS_PER_PTE, x18, x19
 #endif
 	adrp	x3, __idmap_text_start		// __pa(__idmap_text_start)
 	ldr	x6, =IDMAP_TEXT_END		// __va(__idmap_text_end)
