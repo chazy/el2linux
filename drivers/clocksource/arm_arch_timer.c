@@ -755,7 +755,7 @@ static int __init arch_timer_init(void)
 	if (is_hyp_mode_available() || !arch_timer_ppi[VIRT_PPI]) {
 		bool has_ppi;
 
-		if (is_kernel_in_hyp_mode()) {
+		if ((is_kernel_in_hyp_mode() && is_vhe_present())) {
 			arch_timer_uses_ppi = HYP_PPI;
 			has_ppi = !!arch_timer_ppi[HYP_PPI];
 		} else {
