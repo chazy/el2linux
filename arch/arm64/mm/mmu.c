@@ -506,12 +506,6 @@ void __init paging_init(void)
 
 	cpu_set_reserved_ttbr0();
 
-	/*
-	 * If running the kernel in EL2 we have to set the TTBR1_EL1 for
-	 * routing exceptions to EL2 via EL1.
-	 */
-	el1_shim_vectors_init();
-
 	local_flush_tlb_all();
 }
 

@@ -260,6 +260,12 @@ void __init setup_arch(char **cmdline_p)
 	parse_early_param();
 
 	/*
+	 * If running the kernel in EL2 we have to set the TTBR1_EL1 for
+	 * routing exceptions to EL2 via EL1.
+	 */
+	el1_shim_vectors_init();
+
+	/*
 	 *  Unmask asynchronous aborts after bringing up possible earlycon.
 	 * (Report possible System Errors once we can report this occurred)
 	 */
