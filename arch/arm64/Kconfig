@@ -505,6 +505,7 @@ config ARM64_4K_PAGES
 
 config ARM64_16K_PAGES
 	bool "16KB"
+	depends on !EL2_KERNEL
 	help
 	  The system will use 16KB pages support. AArch32 emulation
 	  requires applications compiled with 16K (or a multiple of 16K)
@@ -512,7 +513,6 @@ config ARM64_16K_PAGES
 
 config ARM64_64K_PAGES
 	bool "64KB"
-	depends on !EL2_KERNEL
 	help
 	  This feature enables 64KB pages support (4KB by default)
 	  allowing only two levels of page tables and faster TLB
@@ -549,7 +549,6 @@ config ARM64_VA_BITS_47
 
 config ARM64_VA_BITS_48
 	bool "48-bit"
-	depends on !EL2_KERNEL
 
 endchoice
 
