@@ -685,6 +685,7 @@ install_el2_stub:
 	mov	w20, #BOOT_CPU_MODE_EL2		// This CPU booted in EL2
 	eret
 #else /* CONFIG_EL2_KERNEL */
+	msr	cntvoff_el2, xzr		// Clear virtual offset
 	mov	w20, #BOOT_CPU_MODE_EL2		// This CPU booted in EL2
 	ret
 #endif
