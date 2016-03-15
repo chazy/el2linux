@@ -28,8 +28,12 @@ static void __hyp_text __sysreg_do_nothing(struct kvm_cpu_context *ctxt) { }
 /*
  * Non-VHE: Both host and guest must save everything.
  *
- * VHE: Host must save tpidr*_el[01], actlr_el1, mdscr_el1, sp0, pc,
- * pstate, and guest must save everything.
+ * VHE: Host and guest must save tpidr_el1, mdscr_el1, pc, sp_el0 and pstate
+ * on every switch.  tpidr_el0, tpidrro_el0, and actlr_el1, and only need
+ * to be switched when going to host userspace or a different VCPU.  EL1
+ * registers only need to be switched when potentially going to run a
+ * different VCPU.  The latter two classes are handled as part of
+ * kvm_arch_vcpu_load/put}.
  */
 
 static void __hyp_text __sysreg_save_common_state(struct kvm_cpu_context *ctxt)
@@ -48,7 +52,7 @@ static void __hyp_text __sysreg_save_user_state(struct kvm_cpu_context *ctxt)
 	ctxt->sys_regs[TPIDRRO_EL0]	= read_sysreg(tpidrro_el0);
 }
 
-static void __hyp_text __sysreg_save_state(struct kvm_cpu_context *ctxt)
+static void __hyp_text __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 {
 	ctxt->sys_regs[MPIDR_EL1]	= read_sysreg(vmpidr_el2);
 	ctxt->sys_regs[CSSELR_EL1]	= read_sysreg(csselr_el1);
@@ -71,24 +75,36 @@ static void __hyp_text __sysreg_save_state(struct kvm_cpu_context *ctxt)
 	ctxt->gp_regs.sp_el1		= read_sysreg(sp_el1);
 	ctxt->gp_regs.elr_el1		= read_sysreg_el1(elr);
 	ctxt->gp_regs.spsr[KVM_SPSR_EL1]= read_sysreg_el1(spsr);
+
+	__sysreg_save_user_state(ctxt);
 }
 
-static hyp_alternate_select(__sysreg_call_save_host_state,
-			    __sysreg_save_state, __sysreg_do_nothing,
+static hyp_alternate_select(__sysreg_call_save_el1_state,
+			    __sysreg_save_el1_state, __sysreg_do_nothing,
+			    ARM64_HAS_VIRT_HOST_EXTN);
+
+static void __hyp_text __sysreg_save_el2_return_state(struct kvm_cpu_context *ctxt)
+{
+	ctxt->gp_regs.regs.pc		= read_sysreg_el2(elr);
+	ctxt->gp_regs.regs.pstate	= read_sysreg_el2(spsr);
+}
+
+static hyp_alternate_select(__sysreg_call_save_host_el2_return_state,
+			    __sysreg_save_el2_return_state, __sysreg_do_nothing,
 			    ARM64_HAS_VIRT_HOST_EXTN);
 
 void __hyp_text __sysreg_save_host_state(struct kvm_cpu_context *ctxt)
 {
-	__sysreg_call_save_host_state()(ctxt);
+	__sysreg_call_save_el1_state()(ctxt);
 	__sysreg_save_common_state(ctxt);
-	__sysreg_save_user_state(ctxt);
+	__sysreg_call_save_host_el2_return_state()(ctxt);
 }
 
 void __hyp_text __sysreg_save_guest_state(struct kvm_cpu_context *ctxt)
 {
-	__sysreg_save_state(ctxt);
+	__sysreg_call_save_el1_state()(ctxt);
 	__sysreg_save_common_state(ctxt);
-	__sysreg_save_user_state(ctxt);
+	__sysreg_save_el2_return_state(ctxt);
 }
 
 static void __hyp_text __sysreg_restore_common_state(struct kvm_cpu_context *ctxt)
@@ -96,8 +112,6 @@ static void __hyp_text __sysreg_restore_common_state(struct kvm_cpu_context *ctx
 	write_sysreg(ctxt->sys_regs[TPIDR_EL1],	  tpidr_el1);
 	write_sysreg(ctxt->sys_regs[MDSCR_EL1],	  mdscr_el1);
 	write_sysreg(ctxt->gp_regs.regs.sp,	  sp_el0);
-	write_sysreg_el2(ctxt->gp_regs.regs.pc,	  elr);
-	write_sysreg_el2(ctxt->gp_regs.regs.pstate, spsr);
 }
 
 static void __hyp_text __sysreg_restore_user_state(struct kvm_cpu_context *ctxt)
@@ -107,7 +121,7 @@ static void __hyp_text __sysreg_restore_user_state(struct kvm_cpu_context *ctxt)
 	write_sysreg(ctxt->sys_regs[TPIDRRO_EL0], 	tpidrro_el0);
 }
 
-static void __hyp_text __sysreg_restore_state(struct kvm_cpu_context *ctxt)
+static void __hyp_text __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt)
 {
 	write_sysreg(ctxt->sys_regs[MPIDR_EL1],		vmpidr_el2);
 	write_sysreg(ctxt->sys_regs[CSSELR_EL1],	csselr_el1);
@@ -130,24 +144,38 @@ static void __hyp_text __sysreg_restore_state(struct kvm_cpu_context *ctxt)
 	write_sysreg(ctxt->gp_regs.sp_el1,		sp_el1);
 	write_sysreg_el1(ctxt->gp_regs.elr_el1,		elr);
 	write_sysreg_el1(ctxt->gp_regs.spsr[KVM_SPSR_EL1],spsr);
+
+	__sysreg_restore_user_state(ctxt);
 }
 
-static hyp_alternate_select(__sysreg_call_restore_host_state,
-			    __sysreg_restore_state, __sysreg_do_nothing,
+static hyp_alternate_select(__sysreg_call_restore_el1_state,
+			    __sysreg_restore_el1_state, __sysreg_do_nothing,
+			    ARM64_HAS_VIRT_HOST_EXTN);
+
+static void __hyp_text
+__sysreg_restore_el2_return_state(struct kvm_cpu_context *ctxt)
+{
+	write_sysreg_el2(ctxt->gp_regs.regs.pc,     elr);
+	write_sysreg_el2(ctxt->gp_regs.regs.pstate, spsr);
+}
+
+static hyp_alternate_select(__sysreg_call_restore_host_el2_return_state,
+			    __sysreg_restore_el2_return_state,
+			    __sysreg_do_nothing,
 			    ARM64_HAS_VIRT_HOST_EXTN);
 
 void __hyp_text __sysreg_restore_host_state(struct kvm_cpu_context *ctxt)
 {
-	__sysreg_call_restore_host_state()(ctxt);
+	__sysreg_call_restore_el1_state()(ctxt);
 	__sysreg_restore_common_state(ctxt);
-	__sysreg_restore_user_state(ctxt);
+	__sysreg_call_restore_host_el2_return_state()(ctxt);
 }
 
 void __hyp_text __sysreg_restore_guest_state(struct kvm_cpu_context *ctxt)
 {
-	__sysreg_restore_state(ctxt);
+	__sysreg_call_restore_el1_state()(ctxt);
 	__sysreg_restore_common_state(ctxt);
-	__sysreg_restore_user_state(ctxt);
+	__sysreg_restore_el2_return_state(ctxt);
 }
 
 void __hyp_text __sysreg32_save_state(struct kvm_vcpu *vcpu)
@@ -267,4 +295,67 @@ void __write_sysreg_to_cpu(enum vcpu_sysreg num, unsigned long v)
 	case DBGVCR32_EL2:	write_sysreg(v, dbgvcr32_el2);	break;
 	default:		BUG(); break;
 	}
+}
+
+/**
+ * kvm_vcpu_load_sysregs - Load guest system register to physical CPU
+ *
+ * @vcpu: The VCPU pointer
+ *
+ * If the kernel runs in EL2 then load the system register state for the VCPU
+ * for EL1 onto the physical CPU so that we can go back and foward between the
+ * VM and the hypervisor without switching all this state around.
+ */
+void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
+{
+	struct kvm_cpu_context *host_ctxt;
+	struct kvm_cpu_context *guest_ctxt;
+
+	if (!is_kernel_in_hyp_mode() || vcpu->arch.ctxt.sysregs_loaded_on_cpu)
+		return;
+
+	host_ctxt = vcpu->arch.host_cpu_context;
+	guest_ctxt = &vcpu->arch.ctxt;
+
+	/* Save host user state */
+	__sysreg_save_user_state(host_ctxt);
+	host_ctxt->gp_regs.regs.pc	= read_sysreg_el2(elr);
+	host_ctxt->gp_regs.regs.pstate	= read_sysreg_el2(spsr);
+
+	/* Load guest EL1 and user state */
+	__sysreg_restore_el1_state(guest_ctxt);
+
+	vcpu->arch.ctxt.sysregs_loaded_on_cpu = true;
+}
+
+/**
+ * kvm_vcpu_put_sysregs - Restore host system register state to physical CPU
+ *
+ * @vcpu: The VCPU pointer
+ *
+ * If the kernel runs in EL2 and the physical register state belongs to the
+ * VCPU, then restore the system register state for the host for EL1 onto the
+ * physical CPU so that we can run userspace and other threads on this
+ * physical CPU.
+ */
+void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
+{
+	struct kvm_cpu_context *host_ctxt;
+	struct kvm_cpu_context *guest_ctxt;
+
+	if (!is_kernel_in_hyp_mode() || !vcpu->arch.ctxt.sysregs_loaded_on_cpu)
+		return;
+
+	host_ctxt = vcpu->arch.host_cpu_context;
+	guest_ctxt = &vcpu->arch.ctxt;
+
+	/* Save guest EL1 and user state */
+	__sysreg_save_el1_state(guest_ctxt);
+
+	/* Restore host user state */
+	__sysreg_restore_user_state(host_ctxt);
+	write_sysreg_el2(host_ctxt->gp_regs.regs.pc,	  elr);
+	write_sysreg_el2(host_ctxt->gp_regs.regs.pstate, spsr);
+
+	vcpu->arch.ctxt.sysregs_loaded_on_cpu = false;
 }
