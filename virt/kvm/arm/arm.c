@@ -359,6 +359,8 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
+	kvm_vcpu_put_sysregs(vcpu);
+
 	kvm_timer_vcpu_put(vcpu);
 	kvm_vgic_put(vcpu);
 
@@ -652,6 +654,13 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		preempt_disable();
 
 		kvm_pmu_flush_hwstate(vcpu);
+
+		/*
+		 * If we were preempted while running, we need to load the
+		 * system registers again before running the CPU.  If they are
+		 * already loaded, that's fine, we don't do anything.
+		 */
+		kvm_vcpu_load_sysregs(vcpu);
 
 		local_irq_disable();
 
