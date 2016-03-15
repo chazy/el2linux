@@ -310,6 +310,8 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
+	kvm_vcpu_put_sysregs(vcpu);
+
 	/*
 	 * The arch-generic KVM code expects the cpu field of a vcpu to be -1
 	 * if the vcpu is no longer assigned to a cpu.  This is used for the
@@ -588,6 +590,13 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		kvm_pmu_flush_hwstate(vcpu);
 		kvm_timer_flush_hwstate(vcpu);
 		kvm_vgic_flush_hwstate(vcpu);
+
+		/*
+		 * If we were preempted while running, we need to load the
+		 * system registers again before running the CPU.  If they are
+		 * already loaded, that's fine, we don't do anything.
+		 */
+		kvm_vcpu_load_sysregs(vcpu);
 
 		local_irq_disable();
 
