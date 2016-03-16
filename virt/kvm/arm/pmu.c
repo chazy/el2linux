@@ -37,7 +37,7 @@ u64 kvm_pmu_get_counter_value(struct kvm_vcpu *vcpu, u64 select_idx)
 
 	reg = (select_idx == ARMV8_PMU_CYCLE_IDX)
 	      ? PMCCNTR_EL0 : PMEVCNTR0_EL0 + select_idx;
-	counter = vcpu_sys_reg(vcpu, reg);
+	counter = __vcpu_sys_reg(vcpu, reg);
 
 	/* The real counter value is equal to the value of counter register plus
 	 * the value perf event counts.
@@ -61,7 +61,8 @@ void kvm_pmu_set_counter_value(struct kvm_vcpu *vcpu, u64 select_idx, u64 val)
 
 	reg = (select_idx == ARMV8_PMU_CYCLE_IDX)
 	      ? PMCCNTR_EL0 : PMEVCNTR0_EL0 + select_idx;
-	vcpu_sys_reg(vcpu, reg) += (s64)val - kvm_pmu_get_counter_value(vcpu, select_idx);
+	__vcpu_sys_reg(vcpu, reg) +=
+		(s64)val - kvm_pmu_get_counter_value(vcpu, select_idx);
 }
 
 /**
@@ -78,7 +79,7 @@ static void kvm_pmu_stop_counter(struct kvm_vcpu *vcpu, struct kvm_pmc *pmc)
 		counter = kvm_pmu_get_counter_value(vcpu, pmc->idx);
 		reg = (pmc->idx == ARMV8_PMU_CYCLE_IDX)
 		       ? PMCCNTR_EL0 : PMEVCNTR0_EL0 + pmc->idx;
-		vcpu_sys_reg(vcpu, reg) = counter;
+		__vcpu_sys_reg(vcpu, reg) = counter;
 		perf_event_disable(pmc->perf_event);
 		perf_event_release_kernel(pmc->perf_event);
 		pmc->perf_event = NULL;
@@ -125,7 +126,7 @@ void kvm_pmu_vcpu_destroy(struct kvm_vcpu *vcpu)
 
 u64 kvm_pmu_valid_counter_mask(struct kvm_vcpu *vcpu)
 {
-	u64 val = vcpu_sys_reg(vcpu, PMCR_EL0) >> ARMV8_PMU_PMCR_N_SHIFT;
+	u64 val = __vcpu_sys_reg(vcpu, PMCR_EL0) >> ARMV8_PMU_PMCR_N_SHIFT;
 
 	val &= ARMV8_PMU_PMCR_N_MASK;
 	if (val == 0)
@@ -147,7 +148,7 @@ void kvm_pmu_enable_counter(struct kvm_vcpu *vcpu, u64 val)
 	struct kvm_pmu *pmu = &vcpu->arch.pmu;
 	struct kvm_pmc *pmc;
 
-	if (!(vcpu_sys_reg(vcpu, PMCR_EL0) & ARMV8_PMU_PMCR_E) || !val)
+	if (!(__vcpu_sys_reg(vcpu, PMCR_EL0) & ARMV8_PMU_PMCR_E) || !val)
 		return;
 
 	for (i = 0; i < ARMV8_PMU_MAX_COUNTERS; i++) {
@@ -193,10 +194,10 @@ static u64 kvm_pmu_overflow_status(struct kvm_vcpu *vcpu)
 {
 	u64 reg = 0;
 
-	if ((vcpu_sys_reg(vcpu, PMCR_EL0) & ARMV8_PMU_PMCR_E)) {
-		reg = vcpu_sys_reg(vcpu, PMOVSSET_EL0);
-		reg &= vcpu_sys_reg(vcpu, PMCNTENSET_EL0);
-		reg &= vcpu_sys_reg(vcpu, PMINTENSET_EL1);
+	if ((__vcpu_sys_reg(vcpu, PMCR_EL0) & ARMV8_PMU_PMCR_E)) {
+		reg = __vcpu_sys_reg(vcpu, PMOVSSET_EL0);
+		reg &= __vcpu_sys_reg(vcpu, PMCNTENSET_EL0);
+		reg &= __vcpu_sys_reg(vcpu, PMINTENSET_EL1);
 		reg &= kvm_pmu_valid_counter_mask(vcpu);
 	}
 
@@ -215,7 +216,7 @@ void kvm_pmu_overflow_set(struct kvm_vcpu *vcpu, u64 val)
 	if (val == 0)
 		return;
 
-	vcpu_sys_reg(vcpu, PMOVSSET_EL0) |= val;
+	__vcpu_sys_reg(vcpu, PMOVSSET_EL0) |= val;
 	reg = kvm_pmu_overflow_status(vcpu);
 	if (reg != 0)
 		kvm_vcpu_kick(vcpu);
@@ -299,17 +300,17 @@ void kvm_pmu_software_increment(struct kvm_vcpu *vcpu, u64 val)
 	if (val == 0)
 		return;
 
-	enable = vcpu_sys_reg(vcpu, PMCNTENSET_EL0);
+	enable = __vcpu_sys_reg(vcpu, PMCNTENSET_EL0);
 	for (i = 0; i < ARMV8_PMU_CYCLE_IDX; i++) {
 		if (!(val & BIT(i)))
 			continue;
-		type = vcpu_sys_reg(vcpu, PMEVTYPER0_EL0 + i)
+		type = __vcpu_sys_reg(vcpu, PMEVTYPER0_EL0 + i)
 		       & ARMV8_PMU_EVTYPE_EVENT;
 		if ((type == ARMV8_PMU_EVTYPE_EVENT_SW_INCR)
 		    && (enable & BIT(i))) {
-			reg = vcpu_sys_reg(vcpu, PMEVCNTR0_EL0 + i) + 1;
+			reg = __vcpu_sys_reg(vcpu, PMEVCNTR0_EL0 + i) + 1;
 			reg = lower_32_bits(reg);
-			vcpu_sys_reg(vcpu, PMEVCNTR0_EL0 + i) = reg;
+			__vcpu_sys_reg(vcpu, PMEVCNTR0_EL0 + i) = reg;
 			if (!reg)
 				kvm_pmu_overflow_set(vcpu, BIT(i));
 		}
@@ -331,7 +332,7 @@ void kvm_pmu_handle_pmcr(struct kvm_vcpu *vcpu, u64 val)
 	mask = kvm_pmu_valid_counter_mask(vcpu);
 	if (val & ARMV8_PMU_PMCR_E) {
 		kvm_pmu_enable_counter(vcpu,
-				vcpu_sys_reg(vcpu, PMCNTENSET_EL0) & mask);
+		       __vcpu_sys_reg(vcpu, PMCNTENSET_EL0) & mask);
 	} else {
 		kvm_pmu_disable_counter(vcpu, mask);
 	}
@@ -352,8 +353,8 @@ void kvm_pmu_handle_pmcr(struct kvm_vcpu *vcpu, u64 val)
 
 static bool kvm_pmu_counter_is_enabled(struct kvm_vcpu *vcpu, u64 select_idx)
 {
-	return (vcpu_sys_reg(vcpu, PMCR_EL0) & ARMV8_PMU_PMCR_E) &&
-	       (vcpu_sys_reg(vcpu, PMCNTENSET_EL0) & BIT(select_idx));
+	return (__vcpu_sys_reg(vcpu, PMCR_EL0) & ARMV8_PMU_PMCR_E) &&
+	       (__vcpu_sys_reg(vcpu, PMCNTENSET_EL0) & BIT(select_idx));
 }
 
 /**

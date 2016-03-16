@@ -37,7 +37,7 @@ static bool access_actlr(struct kvm_vcpu *vcpu,
 	if (p->is_write)
 		return ignore_write(vcpu, p);
 
-	p->regval = vcpu_sys_reg(vcpu, ACTLR_EL1);
+	p->regval = vcpu_get_sys_reg(vcpu, ACTLR_EL1);
 	return true;
 }
 
@@ -46,7 +46,7 @@ static void reset_actlr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r)
 	u64 actlr;
 
 	asm volatile("mrs %0, actlr_el1\n" : "=r" (actlr));
-	vcpu_sys_reg(vcpu, ACTLR_EL1) = actlr;
+	__vcpu_sys_reg(vcpu, ACTLR_EL1) = actlr;
 }
 
 /*
