@@ -314,6 +314,7 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
 	kvm_vcpu_put_sysregs(vcpu);
+	kvm_vgic_put(vcpu);
 
 	/*
 	 * The arch-generic KVM code expects the cpu field of a vcpu to be -1
@@ -593,7 +594,10 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		 * non-preemptible context.
 		 */
 		preempt_disable();
+
+		kvm_vgic_load(vcpu);
 		kvm_pmu_flush_hwstate(vcpu);
+
 		kvm_timer_flush_hwstate(vcpu);
 		kvm_vgic_flush_hwstate(vcpu);
 

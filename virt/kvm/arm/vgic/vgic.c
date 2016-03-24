@@ -658,6 +658,16 @@ void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 	spin_unlock(&vcpu->arch.vgic_cpu.ap_list_lock);
 }
 
+void kvm_vgic_load(struct kvm_vcpu *vcpu)
+{
+	vgic_v2_load(vcpu);
+}
+
+void kvm_vgic_put(struct kvm_vcpu *vcpu)
+{
+	vgic_v2_put(vcpu);
+}
+
 int kvm_vgic_vcpu_pending_irq(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;

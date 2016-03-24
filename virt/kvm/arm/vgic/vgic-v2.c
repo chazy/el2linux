@@ -184,6 +184,8 @@ void vgic_v2_clear_lr(struct kvm_vcpu *vcpu, int lr)
 
 void vgic_v2_set_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcrp)
 {
+	struct vgic_dist *vgic = &vcpu->kvm->arch.vgic;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	u32 vmcr;
 
 	vmcr  = (vmcrp->ctlr << GICH_VMCR_CTRL_SHIFT) & GICH_VMCR_CTRL_MASK;
@@ -194,12 +196,24 @@ void vgic_v2_set_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcrp)
 	vmcr |= (vmcrp->pmr << GICH_VMCR_PRIMASK_SHIFT) &
 		GICH_VMCR_PRIMASK_MASK;
 
+	if (vgic_cpu->loaded)
+		writel_relaxed(vmcr, vgic->vctrl_base + GICH_VMCR);
+
 	vcpu->arch.vgic_cpu.vgic_v2.vgic_vmcr = vmcr;
 }
 
 void vgic_v2_get_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcrp)
 {
-	u32 vmcr = vcpu->arch.vgic_cpu.vgic_v2.vgic_vmcr;
+	struct vgic_dist *vgic = &vcpu->kvm->arch.vgic;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	u32 vmcr;
+
+	if (vgic_cpu->loaded) {
+		vmcr = readl_relaxed(vgic->vctrl_base + GICH_VMCR);
+		vgic_cpu->vgic_v2.vgic_vmcr = vmcr;
+	} else {
+		vmcr = vgic_cpu->vgic_v2.vgic_vmcr;
+	}
 
 	vmcrp->ctlr = (vmcr & GICH_VMCR_CTRL_MASK) >>
 			GICH_VMCR_CTRL_SHIFT;
@@ -359,4 +373,38 @@ int vgic_v2_probe(const struct gic_kvm_info *info)
 	kvm_info("vgic-v2@%llx\n", info->vctrl.start);
 
 	return 0;
+}
+
+void vgic_v2_load(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	struct vgic_dist *vgic = &vcpu->kvm->arch.vgic;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+
+	if (!is_kernel_in_hyp_mode())
+		return;
+
+	if (vgic_cpu->loaded)
+		return;
+
+	writel_relaxed(cpu_if->vgic_vmcr, vgic->vctrl_base + GICH_VMCR);
+
+	vgic_cpu->loaded = true;
+}
+
+void vgic_v2_put(struct kvm_vcpu *vcpu)
+{
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	struct vgic_dist *vgic = &vcpu->kvm->arch.vgic;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+
+	if (!is_kernel_in_hyp_mode())
+		return;
+
+	if (!vgic_cpu->loaded)
+		return;
+
+	cpu_if->vgic_vmcr = readl_relaxed(vgic->vctrl_base + GICH_VMCR);
+
+	vgic_cpu->loaded = false;
 }

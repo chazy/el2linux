@@ -63,6 +63,10 @@ int vgic_v2_probe(const struct gic_kvm_info *info);
 int vgic_v2_map_resources(struct kvm *kvm);
 int vgic_register_dist_iodev(struct kvm *kvm, gpa_t dist_base_address,
 			     enum vgic_type);
+#ifdef CONFIG_EL2_KERNEL
+void vgic_v2_load(struct kvm_vcpu *vcpu);
+void vgic_v2_put(struct kvm_vcpu *vcpu);
+#endif
 
 static inline void vgic_get_irq_kref(struct vgic_irq *irq)
 {
