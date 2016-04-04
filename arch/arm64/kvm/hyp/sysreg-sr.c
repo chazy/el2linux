@@ -19,6 +19,7 @@
 #include <linux/kvm_host.h>
 
 #include <asm/kvm_asm.h>
+#include <asm/kvm_emulate.h>
 #include <asm/kvm_hyp.h>
 
 /* Yes, this does nothing, on purpose */
@@ -137,6 +138,11 @@ void __hyp_text __sysreg_restore_guest_state(struct kvm_cpu_context *ctxt)
 	__sysreg_restore_common_state(ctxt);
 }
 
+static void __hyp_text __fpsimd32_save_state(struct kvm_cpu_context *ctxt)
+{
+	ctxt->sys_regs[FPEXC32_EL2] = read_sysreg(fpexc32_el2);
+}
+
 void __hyp_text __sysreg32_save_state(struct kvm_vcpu *vcpu)
 {
 	u64 *spsr, *sysreg;
@@ -154,9 +160,6 @@ void __hyp_text __sysreg32_save_state(struct kvm_vcpu *vcpu)
 
 	sysreg[DACR32_EL2] = read_sysreg(dacr32_el2);
 	sysreg[IFSR32_EL2] = read_sysreg(ifsr32_el2);
-
-	if (__fpsimd_enabled())
-		sysreg[FPEXC32_EL2] = read_sysreg(fpexc32_el2);
 
 	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)
 		sysreg[DBGVCR32_EL2] = read_sysreg(dbgvcr32_el2);
@@ -209,4 +212,16 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
  */
 void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 {
+	struct kvm_cpu_context *host_ctxt = vcpu->arch.host_cpu_context;
+	struct kvm_cpu_context *guest_ctxt = &vcpu->arch.ctxt;
+
+	/* Restore host FP/SIMD state */
+	if (vcpu->arch.guest_vfp_loaded) {
+		if (vcpu_el1_is_32bit(vcpu))
+			kvm_call_hyp(__fpsimd32_save_state,
+				     kern_hyp_va(guest_ctxt));
+		__fpsimd_save_state(&guest_ctxt->gp_regs.fp_regs);
+		__fpsimd_restore_state(&host_ctxt->gp_regs.fp_regs);
+		vcpu->arch.guest_vfp_loaded = 0;
+	}
 }
