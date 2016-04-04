@@ -364,14 +364,21 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
  */
 void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 {
-	struct kvm_cpu_context *host_ctxt;
-	struct kvm_cpu_context *guest_ctxt;
+	struct kvm_cpu_context *host_ctxt = vcpu->arch.host_cpu_context;
+	struct kvm_cpu_context *guest_ctxt = &vcpu->arch.ctxt;
+
+	/* Restore host FP/SIMD state */
+	if (vcpu->arch.guest_vfp_loaded) {
+		if (!(vcpu->arch.hcr_el2 & HCR_RW))
+			kvm_call_hyp(__fpsimd32_save_state,
+				     kern_hyp_va(guest_ctxt));
+		__fpsimd_save_state(&guest_ctxt->gp_regs.fp_regs);
+		__fpsimd_restore_state(&host_ctxt->gp_regs.fp_regs);
+		vcpu->arch.guest_vfp_loaded = 0;
+	}
 
 	if (!is_kernel_in_hyp_mode() || !vcpu->arch.ctxt.sysregs_loaded_on_cpu)
 		return;
-
-	host_ctxt = vcpu->arch.host_cpu_context;
-	guest_ctxt = &vcpu->arch.ctxt;
 
 	/* Save guest EL1 and user state */
 	__sysreg_save_el1_state(guest_ctxt);

@@ -214,6 +214,9 @@ struct kvm_vcpu_arch {
 	/* Guest debug state */
 	u64 debug_flags;
 
+	/* 1 if the guest VFP state is loaded into the hardware */
+	u64 guest_vfp_loaded;
+
 	/*
 	 * We maintain more than a single set of debug registers to support
 	 * debugging the guest from the host and to maintain separate host and

@@ -152,6 +152,9 @@ alternative_endif
 	add	x0, x2, #CPU_GP_REG_OFFSET(CPU_FP_REGS)
 	bl	__fpsimd_restore_state
 
+	mov	x0, #1
+	str	x0, [x3, #VCPU_GUEST_VFP_LOADED]
+
 	// Skip restoring fpexc32 for AArch64 guests
 	mrs	x1, hcr_el2
 	tbnz	x1, #HCR_RW_SHIFT, 1f

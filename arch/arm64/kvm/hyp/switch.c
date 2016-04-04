@@ -38,24 +38,31 @@ bool __hyp_text __fpsimd_enabled(void)
 	return __fpsimd_is_enabled()();
 }
 
-static void __hyp_text __activate_traps_vhe(void)
+static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
 {
 	u64 val;
 
 	val = read_sysreg(cpacr_el1);
 	val |= CPACR_EL1_TTA;
-	val &= ~CPACR_EL1_FPEN;
+	if (vcpu->arch.guest_vfp_loaded)
+		val |= CPACR_EL1_FPEN;
+	else
+		val &= ~CPACR_EL1_FPEN;
 	write_sysreg(val, cpacr_el1);
 
 	write_sysreg(__kvm_hyp_vector, vbar_el1);
 }
 
-static void __hyp_text __activate_traps_nvhe(void)
+static void __hyp_text __activate_traps_nvhe(struct kvm_vcpu *vcpu)
 {
 	u64 val;
 
 	val = CPTR_EL2_DEFAULT;
-	val |= CPTR_EL2_TTA | CPTR_EL2_TFP;
+	val |= CPTR_EL2_TTA;
+	if (vcpu->arch.guest_vfp_loaded)
+		val &= ~CPTR_EL2_TFP;
+	else
+		val |= CPTR_EL2_TFP;
 	write_sysreg(val, cptr_el2);
 
 #ifdef CONFIG_EL2_KERNEL
@@ -79,7 +86,7 @@ static void __hyp_text __activate_traps(struct kvm_vcpu *vcpu)
 	 * we set FPEXC.EN to prevent traps to EL1, when setting the TFP bit.
 	 */
 	val = vcpu->arch.hcr_el2;
-	if (!(val & HCR_RW)) {
+	if (!(val & HCR_RW) && !vcpu->arch.guest_vfp_loaded) {
 		write_sysreg(1 << 30, fpexc32_el2);
 		isb();
 	}
@@ -89,7 +96,7 @@ static void __hyp_text __activate_traps(struct kvm_vcpu *vcpu)
 	/* Make sure we trap PMU access from EL0 to EL2 */
 	write_sysreg(ARMV8_PMU_USERENR_MASK, pmuserenr_el0);
 	write_sysreg(vcpu->arch.mdcr_el2, mdcr_el2);
-	__activate_traps_arch()();
+	__activate_traps_arch()(vcpu);
 }
 
 static void __hyp_text __deactivate_traps_vhe(void)
@@ -246,7 +253,6 @@ static int __hyp_text __guest_run(struct kvm_vcpu *vcpu)
 {
 	struct kvm_cpu_context *host_ctxt;
 	struct kvm_cpu_context *guest_ctxt;
-	bool fp_enabled;
 	u64 exit_code;
 
 #ifdef CONFIG_EL2_KERNEL
@@ -289,8 +295,6 @@ again:
 	write_sysreg(host_tpidr_el2, tpidr_el2);
 #endif
 
-	fp_enabled = __fpsimd_enabled();
-
 	__sysreg_save_guest_state(guest_ctxt);
 	__sysreg32_save_state(vcpu);
 	__timer_save_state(vcpu);
@@ -300,13 +304,6 @@ again:
 	__deactivate_vm(vcpu);
 
 	__sysreg_restore_host_state(host_ctxt);
-
-	if (fp_enabled) {
-		if (!(vcpu->arch.hcr_el2 & HCR_RW))
-			__fpsimd32_save_state(guest_ctxt);
-		__fpsimd_save_state(&guest_ctxt->gp_regs.fp_regs);
-		__fpsimd_restore_state(&host_ctxt->gp_regs.fp_regs);
-	}
 
 	__debug_save_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
 	__debug_cond_restore_host_state(vcpu);
