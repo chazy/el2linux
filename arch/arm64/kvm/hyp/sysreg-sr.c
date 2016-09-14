@@ -242,7 +242,6 @@ unsigned long __read_sysreg_from_cpu(enum vcpu_sysreg num)
 	/* 32bit specific registers. Keep them at the end of the range */
 	case DACR32_EL2:	return read_sysreg(dacr32_el2);
 	case IFSR32_EL2:	return read_sysreg(ifsr32_el2);
-	case FPEXC32_EL2:	return read_sysreg(fpexc32_el2);
 	case DBGVCR32_EL2:	return read_sysreg(dbgvcr32_el2);
 	default:		BUG(); return 0;
 	}
@@ -278,7 +277,6 @@ void __write_sysreg_to_cpu(enum vcpu_sysreg num, unsigned long v)
 	/* 32bit specific registers. Keep them at the end of the range */
 	case DACR32_EL2:	write_sysreg(v, dacr32_el2);	break;
 	case IFSR32_EL2:	write_sysreg(v, ifsr32_el2);	break;
-	case FPEXC32_EL2:	write_sysreg(v, fpexc32_el2);	break;
 	case DBGVCR32_EL2:	write_sysreg(v, dbgvcr32_el2);	break;
 	default:		BUG(); break;
 	}
@@ -305,6 +303,15 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 	guest_ctxt = &vcpu->arch.ctxt;
 
 	__sysreg_save_user_state(host_ctxt);
+
+
+	/*
+	 * Load guest EL1 and user state
+	 *
+	 * We must restore the 32-bit state before the sysregs, thanks
+	 * to erratum #852523 (Cortex-A57) or #853709 (Cortex-A72).
+	 */
+	__sysreg32_restore_state(vcpu);
 	__sysreg_restore_user_state(guest_ctxt);
 	__sysreg_restore_el1_state(guest_ctxt);
 
@@ -345,6 +352,9 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 
 	__sysreg_save_el1_state(guest_ctxt);
 	__sysreg_save_user_state(guest_ctxt);
+	__sysreg32_save_state(vcpu);
+
+	/* Restore host user state */
 	__sysreg_restore_user_state(host_ctxt);
 
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = false;
