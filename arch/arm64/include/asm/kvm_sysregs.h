@@ -32,9 +32,14 @@
 unsigned long __read_sysreg_from_cpu(enum vcpu_sysreg num);
 void __write_sysreg_to_cpu(enum vcpu_sysreg num, unsigned long v);
 
+/*
+ * We have to special-case FPEXC32 below, because we take a different approach
+ * to dealing with fpsimd registers compared to other system registers.
+ */
+
 static inline u64 vcpu_get_sys_reg(struct kvm_vcpu *vcpu, int sysreg)
 {
-	if (vcpu->arch.ctxt.sysregs_loaded_on_cpu && sysreg < DACR32_EL2)
+	if (vcpu->arch.ctxt.sysregs_loaded_on_cpu && sysreg != FPEXC32_EL2)
 		return __read_sysreg_from_cpu(sysreg);
 	else
 		return vcpu->arch.ctxt.sys_regs[(sysreg)];
@@ -43,7 +48,7 @@ static inline u64 vcpu_get_sys_reg(struct kvm_vcpu *vcpu, int sysreg)
 static inline void vcpu_set_sys_reg(struct kvm_vcpu *vcpu, int sysreg,
 				    u64 val)
 {
-	if (vcpu->arch.ctxt.sysregs_loaded_on_cpu && sysreg < DACR32_EL2)
+	if (vcpu->arch.ctxt.sysregs_loaded_on_cpu && sysreg != FPEXC32_EL2)
 		__write_sysreg_to_cpu(sysreg, val);
 	else
 		vcpu->arch.ctxt.sys_regs[(sysreg)] = val;
