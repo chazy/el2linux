@@ -20,6 +20,7 @@
 
 #include <asm/kvm_asm.h>
 #include <asm/kvm_hyp.h>
+#include <asm/kvm_sysregs.h>
 
 /* Yes, this does nothing, on purpose */
 static void __hyp_text __sysreg_do_nothing(struct kvm_cpu_context *ctxt) { }
@@ -194,4 +195,76 @@ void __hyp_text __sysreg32_restore_state(struct kvm_vcpu *vcpu)
 
 	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)
 		write_sysreg(sysreg[DBGVCR32_EL2], dbgvcr32_el2);
+}
+
+unsigned long __read_sysreg_from_cpu(enum vcpu_sysreg num)
+{
+	switch (num) {
+	case MPIDR_EL1:		return read_sysreg(vmpidr_el2);
+	case CSSELR_EL1:	return read_sysreg(csselr_el1);
+	case SCTLR_EL1:		return read_sysreg_el1(sctlr);
+	case ACTLR_EL1:		return read_sysreg(actlr_el1);
+	case CPACR_EL1:		return read_sysreg_el1(cpacr);
+	case TTBR0_EL1:		return read_sysreg_el1(ttbr0);
+	case TTBR1_EL1:		return read_sysreg_el1(ttbr1);
+	case TCR_EL1:		return read_sysreg_el1(tcr);
+	case ESR_EL1:		return read_sysreg_el1(esr);
+	case AFSR0_EL1:		return read_sysreg_el1(afsr0);
+	case AFSR1_EL1:		return read_sysreg_el1(afsr1);
+	case FAR_EL1:		return read_sysreg_el1(far);
+	case MAIR_EL1:		return read_sysreg_el1(mair);
+	case VBAR_EL1:		return read_sysreg_el1(vbar);
+	case CONTEXTIDR_EL1:	return read_sysreg_el1(contextidr);
+	case TPIDR_EL0:		return read_sysreg(tpidr_el0);
+	case TPIDRRO_EL0:	return read_sysreg(tpidrro_el0);
+	case TPIDR_EL1:		return read_sysreg(tpidr_el1);
+	case AMAIR_EL1:		return read_sysreg_el1(amair);
+	case CNTKCTL_EL1:	return read_sysreg_el1(cntkctl);
+	case PAR_EL1:		return read_sysreg(par_el1);
+	case MDSCR_EL1:		return read_sysreg(mdscr_el1);
+	case MDCCINT_EL1:	BUG(); return 0;
+
+	/* 32bit specific registers. Keep them at the end of the range */
+	case DACR32_EL2:	return read_sysreg(dacr32_el2);
+	case IFSR32_EL2:	return read_sysreg(ifsr32_el2);
+	case FPEXC32_EL2:	return read_sysreg(fpexc32_el2);
+	case DBGVCR32_EL2:	return read_sysreg(dbgvcr32_el2);
+	default:		BUG(); return 0;
+	}
+}
+
+void __write_sysreg_to_cpu(enum vcpu_sysreg num, unsigned long v)
+{
+	switch (num) {
+	case MPIDR_EL1:		write_sysreg(v, vmpidr_el2);	break;
+	case CSSELR_EL1:	write_sysreg(v, csselr_el1);	break;
+	case SCTLR_EL1:		write_sysreg_el1(v, sctlr); 	break;
+	case ACTLR_EL1:		write_sysreg(v, actlr_el1); 	break;
+	case CPACR_EL1:		write_sysreg_el1(v, cpacr); 	break;
+	case TTBR0_EL1:		write_sysreg_el1(v, ttbr0); 	break;
+	case TTBR1_EL1:		write_sysreg_el1(v, ttbr1); 	break;
+	case TCR_EL1:		write_sysreg_el1(v, tcr);	break;
+	case ESR_EL1:		write_sysreg_el1(v, esr);	break;
+	case AFSR0_EL1:		write_sysreg_el1(v, afsr0);	break;
+	case AFSR1_EL1:		write_sysreg_el1(v, afsr1);	break;
+	case FAR_EL1:		write_sysreg_el1(v, far);	break;
+	case MAIR_EL1:		write_sysreg_el1(v, mair);	break;
+	case VBAR_EL1:		write_sysreg_el1(v, vbar);	break;
+	case CONTEXTIDR_EL1:	write_sysreg_el1(v, contextidr);break;
+	case TPIDR_EL0:		write_sysreg(v, tpidr_el0);	break;
+	case TPIDRRO_EL0:	write_sysreg(v, tpidrro_el0);	break;
+	case TPIDR_EL1:		write_sysreg(v, tpidr_el1);	break;
+	case AMAIR_EL1:		write_sysreg_el1(v, amair);	break;
+	case CNTKCTL_EL1:	write_sysreg_el1(v, cntkctl);	break;
+	case PAR_EL1:		write_sysreg(v, par_el1);	break;
+	case MDSCR_EL1:		write_sysreg(v, mdscr_el1);	break;
+	case MDCCINT_EL1:	BUG(); break;
+
+	/* 32bit specific registers. Keep them at the end of the range */
+	case DACR32_EL2:	write_sysreg(v, dacr32_el2);	break;
+	case IFSR32_EL2:	write_sysreg(v, ifsr32_el2);	break;
+	case FPEXC32_EL2:	write_sysreg(v, fpexc32_el2);	break;
+	case DBGVCR32_EL2:	write_sysreg(v, dbgvcr32_el2);	break;
+	default:		BUG(); break;
+	}
 }

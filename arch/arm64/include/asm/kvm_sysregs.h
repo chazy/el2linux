@@ -20,6 +20,34 @@
 #define __ARM_KVM_SYSREGS_H
 
 /*
+ * Only use __vcpu_sys_reg if you know you want the memory backed version of a
+ * register, and not the one most recently accessed by a runnning VCPU.  For
+ * example, for userpace access or for system registers that are never context
+ * switched, but only emulated.
+ */
+#define __vcpu_sys_reg(v,r)	((v)->arch.ctxt.sys_regs[(r)])
+
+unsigned long __read_sysreg_from_cpu(enum vcpu_sysreg num);
+void __write_sysreg_to_cpu(enum vcpu_sysreg num, unsigned long v);
+
+static inline u64 vcpu_get_sys_reg(struct kvm_vcpu *vcpu, int sysreg)
+{
+	if (vcpu->arch.ctxt.sysregs_loaded_on_cpu && sysreg < DACR32_EL2)
+		return __read_sysreg_from_cpu(sysreg);
+	else
+		return vcpu->arch.ctxt.sys_regs[(sysreg)];
+}
+
+static inline void vcpu_set_sys_reg(struct kvm_vcpu *vcpu, int sysreg,
+				    u64 val)
+{
+	if (vcpu->arch.ctxt.sysregs_loaded_on_cpu && sysreg < DACR32_EL2)
+		__write_sysreg_to_cpu(sysreg, val);
+	else
+		vcpu->arch.ctxt.sys_regs[(sysreg)] = val;
+}
+
+/*
  * CP14 and CP15 live in the same array, as they are backed by the
  * same system registers.
  */
