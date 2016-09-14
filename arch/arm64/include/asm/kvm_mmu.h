@@ -111,6 +111,7 @@ alternative_else_nop_endif
 #include <asm/cache.h>
 #include <asm/cacheflush.h>
 #include <asm/mmu_context.h>
+#include <asm/kvm_sysregs.h>
 #include <asm/pgtable.h>
 
 static inline unsigned long __kern_hyp_va(unsigned long v)
