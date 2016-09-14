@@ -193,6 +193,14 @@ struct kvm_cpu_context {
 	};
 
 	struct kvm_vcpu *__hyp_running_vcpu;
+
+	/*
+	 * True if the values in this struct are potentially out of date
+	 * because they've been loaded onto the CPU register file and not yet
+	 * saved back onto this struct.  Only relevant for VCPU guest contexts
+	 * under VHE kernels.
+	 */
+	bool sysregs_loaded_on_cpu;
 };
 
 typedef struct kvm_cpu_context kvm_cpu_context_t;
@@ -284,17 +292,6 @@ struct kvm_vcpu_arch {
 };
 
 #define vcpu_gp_regs(v)		(&(v)->arch.ctxt.gp_regs)
-
-/*
- * Only use __vcpu_sys_reg if you know you want the memory backed version of a
- * register, and not the one most recently accessed by a running VCPU.  For
- * example, for userspace access or for system registers that are never context
- * switched, but only emulated.
- */
-#define __vcpu_sys_reg(v,r)	((v)->arch.ctxt.sys_regs[(r)])
-
-#define vcpu_get_sys_reg(v,r)	__vcpu_sys_reg(v,r)
-#define vcpu_set_sys_reg(v,r,n)	do { __vcpu_sys_reg(v,r) = n; } while (0)
 
 struct kvm_vm_stat {
 	ulong remote_tlb_flush;
