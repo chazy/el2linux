@@ -302,6 +302,8 @@ again:
 	__sysreg_restore_host_state(host_ctxt);
 
 	if (fp_enabled) {
+		if (!(vcpu->arch.hcr_el2 & HCR_RW))
+			__fpsimd32_save_state(guest_ctxt);
 		__fpsimd_save_state(&guest_ctxt->gp_regs.fp_regs);
 		__fpsimd_restore_state(&host_ctxt->gp_regs.fp_regs);
 	}

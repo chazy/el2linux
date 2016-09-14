@@ -136,6 +136,7 @@ void __sysreg_save_guest_state(struct kvm_cpu_context *ctxt);
 void __sysreg_restore_guest_state(struct kvm_cpu_context *ctxt);
 void __sysreg32_save_state(struct kvm_vcpu *vcpu);
 void __sysreg32_restore_state(struct kvm_vcpu *vcpu);
+void __fpsimd32_save_state(struct kvm_cpu_context *ctxt);
 
 void __debug_save_state(struct kvm_vcpu *vcpu,
 			struct kvm_guest_debug_arch *dbg,
