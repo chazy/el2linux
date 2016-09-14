@@ -194,6 +194,12 @@ static void __hyp_text __sysreg32_save_cp_state(struct kvm_vcpu *vcpu)
 		sysreg[DBGVCR32_EL2] = read_sysreg(dbgvcr32_el2);
 }
 
+static void __hyp_text __sysreg32_do_nothing(struct kvm_vcpu *vcpu) { }
+
+static hyp_alternate_select(__sysreg32_call_save_cp_state,
+			    __sysreg32_save_cp_state, __sysreg32_do_nothing,
+			    ARM64_HAS_VIRT_HOST_EXTN);
+
 void __hyp_text __sysreg32_save_state(struct kvm_vcpu *vcpu)
 {
 	u64 *spsr;
@@ -208,7 +214,7 @@ void __hyp_text __sysreg32_save_state(struct kvm_vcpu *vcpu)
 	spsr[KVM_SPSR_IRQ] = read_sysreg(spsr_irq);
 	spsr[KVM_SPSR_FIQ] = read_sysreg(spsr_fiq);
 
-	__sysreg32_save_cp_state(vcpu);
+	__sysreg32_call_save_cp_state()(vcpu);
 }
 
 static void __hyp_text __sysreg32_restore_cp_state(struct kvm_vcpu *vcpu)
@@ -221,6 +227,10 @@ static void __hyp_text __sysreg32_restore_cp_state(struct kvm_vcpu *vcpu)
 	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)
 		write_sysreg(sysreg[DBGVCR32_EL2], dbgvcr32_el2);
 }
+
+static hyp_alternate_select(__sysreg32_call_restore_cp_state,
+			    __sysreg32_restore_cp_state, __sysreg32_do_nothing,
+			    ARM64_HAS_VIRT_HOST_EXTN);
 
 void __hyp_text __sysreg32_restore_state(struct kvm_vcpu *vcpu)
 {
@@ -236,7 +246,7 @@ void __hyp_text __sysreg32_restore_state(struct kvm_vcpu *vcpu)
 	write_sysreg(spsr[KVM_SPSR_IRQ], spsr_irq);
 	write_sysreg(spsr[KVM_SPSR_FIQ], spsr_fiq);
 
-	__sysreg32_restore_cp_state(vcpu);
+	__sysreg32_call_restore_cp_state()(vcpu);
 }
 
 unsigned long __read_sysreg_from_cpu(enum vcpu_sysreg num)
@@ -336,6 +346,8 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 
 	/* Load guest EL1 and user state */
 	__sysreg_restore_el1_state(guest_ctxt);
+	if (!(vcpu->arch.hcr_el2 & HCR_RW))
+		__sysreg32_restore_cp_state(vcpu);
 
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = true;
 }
@@ -363,6 +375,8 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 
 	/* Save guest EL1 and user state */
 	__sysreg_save_el1_state(guest_ctxt);
+	if (!(read_sysreg(hcr_el2) & HCR_RW))
+		__sysreg32_save_cp_state(vcpu);
 
 	/* Restore host user state */
 	__sysreg_restore_user_state(host_ctxt);
