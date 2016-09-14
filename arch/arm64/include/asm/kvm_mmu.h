@@ -115,6 +115,7 @@ alternative_endif
 #include <asm/cachetype.h>
 #include <asm/cacheflush.h>
 #include <asm/mmu_context.h>
+#include <asm/kvm_sysregs.h>
 #include <asm/pgtable.h>
 
 #ifndef CONFIG_EL2_KERNEL

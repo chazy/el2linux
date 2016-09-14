@@ -190,6 +190,13 @@ struct kvm_cpu_context {
 		u64 sys_regs[NR_SYS_REGS];
 		u32 copro[NR_COPRO_REGS];
 	};
+	/*
+	 * True if the values in this struct are potentially out of date
+	 * because they've been loaded onto the CPU register file and not yet
+	 * saved back onto this struct.  Only relevant for VCPU guest contexts
+	 * under VHE kernels.
+	 */
+	bool sysregs_loaded_on_cpu;
 };
 
 typedef struct kvm_cpu_context kvm_cpu_context_t;
@@ -273,57 +280,6 @@ struct kvm_vcpu_arch {
 };
 
 #define vcpu_gp_regs(v)		(&(v)->arch.ctxt.gp_regs)
-
-/*
- * Only use __vcpu_sys_reg if you know you want the memory backed version of a
- * register, and not the one most recently accessed by a runnning VCPU.  For
- * example, for userpace access or for system registers that are never context
- * switched, but only emulated.
- */
-#define __vcpu_sys_reg(v,r)	((v)->arch.ctxt.sys_regs[(r)])
-
-#define vcpu_get_sys_reg(v,r)	__vcpu_sys_reg(v,r)
-#define vcpu_set_sys_reg(v,r,n)	do { __vcpu_sys_reg(v,r) = n; } while (0)
-
-/*
- * CP14 and CP15 live in the same array, as they are backed by the
- * same system registers.
- */
-#define __vcpu_cp14(v,r)	((v)->arch.ctxt.copro[(r)])
-#define __vcpu_cp15(v,r)	((v)->arch.ctxt.copro[(r)])
-
-static inline u32 vcpu_get_cpreg(struct kvm_vcpu *vcpu, int cpreg)
-{
-	int sysreg = cpreg / 2;
-	if (cpreg % 2 == 1)
-		return upper_32_bits(vcpu_get_sys_reg(vcpu, sysreg));
-	else
-		return vcpu_get_sys_reg(vcpu, sysreg);
-}
-
-static inline void vcpu_set_cpreg(struct kvm_vcpu *vcpu, int cpreg, u32 val)
-{
-	int sysreg = cpreg / 2;
-	u64 reg = vcpu_get_sys_reg(vcpu, sysreg);
-
-	if (cpreg % 2 == 1)
-		reg = (reg & GENMASK(31, 0)) | ((u64)val << 32);
-	else
-		reg = (reg & GENMASK(36, 32)) | (u64)val;
-	vcpu_set_sys_reg(vcpu, sysreg, reg);
-}
-
-static inline u64 vcpu_get_cpreg_64(struct kvm_vcpu *vcpu, int cpreg)
-{
-	int sysreg = cpreg / 2;
-	return vcpu_get_sys_reg(vcpu, sysreg);
-}
-
-static inline void vcpu_set_cpreg_64(struct kvm_vcpu *vcpu, int cpreg, u64 val)
-{
-	int sysreg = cpreg / 2;
-	vcpu_set_sys_reg(vcpu, sysreg, val);
-}
 
 struct kvm_vm_stat {
 	u32 remote_tlb_flush;

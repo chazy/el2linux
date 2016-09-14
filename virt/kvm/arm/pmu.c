@@ -21,6 +21,7 @@
 #include <linux/perf_event.h>
 #include <linux/uaccess.h>
 #include <asm/kvm_emulate.h>
+#include <asm/kvm_sysregs.h>
 #include <kvm/arm_pmu.h>
 #include <kvm/arm_vgic.h>
 
