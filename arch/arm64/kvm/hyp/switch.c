@@ -154,18 +154,10 @@ static hyp_alternate_select(__vgic_call_restore_state,
 static void __hyp_text __vgic_save_state(struct kvm_vcpu *vcpu)
 {
 	__vgic_call_save_state()(vcpu);
-	write_sysreg(read_sysreg(hcr_el2) & ~HCR_INT_OVERRIDE, hcr_el2);
 }
 
 static void __hyp_text __vgic_restore_state(struct kvm_vcpu *vcpu)
 {
-	u64 val;
-
-	val = read_sysreg(hcr_el2);
-	val |= 	HCR_INT_OVERRIDE;
-	val |= vcpu->arch.irq_lines;
-	write_sysreg(val, hcr_el2);
-
 	__vgic_call_restore_state()(vcpu);
 }
 
