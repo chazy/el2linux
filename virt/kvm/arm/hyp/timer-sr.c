@@ -21,33 +21,18 @@
 
 #include <asm/kvm_hyp.h>
 
-/* vcpu is already in the HYP VA space */
-void __hyp_text __timer_save_state(struct kvm_vcpu *vcpu)
+void __hyp_text enable_phys_timer(void)
 {
-	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
 	u64 val;
-
-	if (timer->enabled) {
-		timer->cntv_ctl = read_sysreg_el0(cntv_ctl);
-		timer->cntv_cval = read_sysreg_el0(cntv_cval);
-	}
-
-	/* Disable the virtual timer */
-	write_sysreg_el0(0, cntv_ctl);
 
 	/* Allow physical timer/counter access for the host */
 	val = read_sysreg(cnthctl_el2);
 	val |= CNTHCTL_EL1PCTEN | CNTHCTL_EL1PCEN;
 	write_sysreg(val, cnthctl_el2);
-
-	/* Clear cntvoff for the host */
-	write_sysreg(0, cntvoff_el2);
 }
 
-void __hyp_text __timer_restore_state(struct kvm_vcpu *vcpu)
+void __hyp_text disable_phys_timer(void)
 {
-	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
-	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
 	u64 val;
 
 	/*
@@ -58,6 +43,36 @@ void __hyp_text __timer_restore_state(struct kvm_vcpu *vcpu)
 	val &= ~CNTHCTL_EL1PCEN;
 	val |= CNTHCTL_EL1PCTEN;
 	write_sysreg(val, cnthctl_el2);
+}
+
+/* vcpu is already in the HYP VA space */
+void __hyp_text __timer_save_state(struct kvm_vcpu *vcpu)
+{
+	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
+
+	if (timer->enabled) {
+		timer->cntv_ctl = read_sysreg_el0(cntv_ctl);
+		timer->cntv_cval = read_sysreg_el0(cntv_cval);
+	}
+
+	/* Disable the virtual timer */
+	write_sysreg_el0(0, cntv_ctl);
+
+#ifndef CONFIG_EL2_KERNEL
+	enable_phys_timer();
+#endif
+	/* Clear cntvoff for the host */
+	write_sysreg(0, cntvoff_el2);
+}
+
+void __hyp_text __timer_restore_state(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
+	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
+
+#ifndef CONFIG_EL2_KERNEL
+	disable_phys_timer();
+#endif
 
 	if (timer->enabled) {
 		write_sysreg(kvm->arch.timer.cntvoff, cntvoff_el2);

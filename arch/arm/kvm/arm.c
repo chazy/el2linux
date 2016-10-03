@@ -1049,6 +1049,18 @@ long kvm_arch_vm_ioctl(struct file *filp,
 	}
 }
 
+static void cpu_init_stage2(void *dummy)
+{
+	__cpu_init_stage2();
+}
+
+#ifdef CONFIG_EL2_KERNEL
+static void el2_init_timer(void *dummy)
+{
+	disable_phys_timer();
+}
+#endif
+
 static void cpu_init_hyp_mode(void *dummy)
 {
 	phys_addr_t pgd_ptr;
@@ -1250,6 +1262,15 @@ static void teardown_hyp_mode(void)
 
 static int init_vhe_mode(void)
 {
+	/*
+	 * Execute the init code on each CPU.
+	 */
+	on_each_cpu(cpu_init_stage2, NULL, 1);
+
+#ifdef CONFIG_EL2_KERNEL
+	on_each_cpu(el2_init_timer, NULL, 1);
+#endif
+
 	/* set size of VMID supported by CPU */
 	kvm_vmid_bits = kvm_get_vmid_bits();
 	kvm_info("%d-bit VMID\n", kvm_vmid_bits);

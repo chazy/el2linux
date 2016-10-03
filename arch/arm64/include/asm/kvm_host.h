@@ -387,5 +387,8 @@ static inline void __cpu_init_stage2(void)
 
 void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu);
 void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu);
+#ifdef CONFIG_EL2_KERNEL
+extern void disable_phys_timer(void);
+#endif
 
 #endif /* __ARM64_KVM_HOST_H__ */
