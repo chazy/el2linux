@@ -936,6 +936,7 @@ __switch_mm:
 	 * page table that left stale entries in there.
 	 */
 	tlbi	alle2
+	dsb	sy
 	ic	iallu
 	dsb	nsh
 	isb
