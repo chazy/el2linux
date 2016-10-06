@@ -196,7 +196,9 @@ void __init arm64_memblock_init(void)
 	 * virtual address space. This way, we can distinguish a linear address
 	 * from a kernel/module/vmalloc address by testing a single bit.
 	 */
+#ifndef CONFIG_EL2_KERNEL
 	BUILD_BUG_ON(linear_region_size != BIT(VA_BITS - 1));
+#endif
 
 	/*
 	 * Select a suitable value for the base of physical memory.
