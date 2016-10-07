@@ -227,7 +227,11 @@ ENTRY(stext)
 	 * the TCR will have been set.
 	 */
 	bl	__cpu_setup			// initialise processor
+#ifndef CONFIG_EL2_KERNEL
 	adr_l	x27, __primary_switch		// address to jump to after
+#else
+	ldr	x27, =__primary_switch		// address to jump to after
+#endif
 						// MMU has been enabled
 	b	__enable_mmu
 ENDPROC(stext)
