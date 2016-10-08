@@ -289,16 +289,41 @@ struct kvm_vcpu_arch {
  * CP14 and CP15 live in the same array, as they are backed by the
  * same system registers.
  */
-#define vcpu_cp14(v,r)		((v)->arch.ctxt.copro[(r)])
-#define vcpu_cp15(v,r)		((v)->arch.ctxt.copro[(r)])
+#define __vcpu_cp14(v,r)	((v)->arch.ctxt.copro[(r)])
+#define __vcpu_cp15(v,r)	((v)->arch.ctxt.copro[(r)])
 
-#ifdef CONFIG_CPU_BIG_ENDIAN
-#define vcpu_cp15_64_high(v,r)	vcpu_cp15((v),(r))
-#define vcpu_cp15_64_low(v,r)	vcpu_cp15((v),(r) + 1)
-#else
-#define vcpu_cp15_64_high(v,r)	vcpu_cp15((v),(r) + 1)
-#define vcpu_cp15_64_low(v,r)	vcpu_cp15((v),(r))
-#endif
+static inline u32 vcpu_get_cpreg(struct kvm_vcpu *vcpu, int cpreg)
+{
+	int sysreg = cpreg / 2;
+	if (cpreg % 2 == 1)
+		return upper_32_bits(vcpu_get_sys_reg(vcpu, sysreg));
+	else
+		return vcpu_get_sys_reg(vcpu, sysreg);
+}
+
+static inline void vcpu_set_cpreg(struct kvm_vcpu *vcpu, int cpreg, u32 val)
+{
+	int sysreg = cpreg / 2;
+	u64 reg = vcpu_get_sys_reg(vcpu, sysreg);
+
+	if (cpreg % 2 == 1)
+		reg = (reg & GENMASK(31, 0)) | ((u64)val << 32);
+	else
+		reg = (reg & GENMASK(36, 32)) | (u64)val;
+	vcpu_set_sys_reg(vcpu, sysreg, reg);
+}
+
+static inline u64 vcpu_get_cpreg_64(struct kvm_vcpu *vcpu, int cpreg)
+{
+	int sysreg = cpreg / 2;
+	return vcpu_get_sys_reg(vcpu, sysreg);
+}
+
+static inline void vcpu_set_cpreg_64(struct kvm_vcpu *vcpu, int cpreg, u64 val)
+{
+	int sysreg = cpreg / 2;
+	vcpu_set_sys_reg(vcpu, sysreg, val);
+}
 
 struct kvm_vm_stat {
 	u32 remote_tlb_flush;
