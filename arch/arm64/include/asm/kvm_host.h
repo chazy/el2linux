@@ -296,21 +296,6 @@ struct kvm_vcpu_arch {
 #define vcpu_get_sys_reg(v,r)	__vcpu_sys_reg(v,r)
 #define vcpu_set_sys_reg(v,r,n)	do { __vcpu_sys_reg(v,r) = n; } while (0)
 
-/*
- * CP14 and CP15 live in the same array, as they are backed by the
- * same system registers.
- */
-#define vcpu_cp14(v,r)		((v)->arch.ctxt.copro[(r)])
-#define vcpu_cp15(v,r)		((v)->arch.ctxt.copro[(r)])
-
-#ifdef CONFIG_CPU_BIG_ENDIAN
-#define vcpu_cp15_64_high(v,r)	vcpu_cp15((v),(r))
-#define vcpu_cp15_64_low(v,r)	vcpu_cp15((v),(r) + 1)
-#else
-#define vcpu_cp15_64_high(v,r)	vcpu_cp15((v),(r) + 1)
-#define vcpu_cp15_64_low(v,r)	vcpu_cp15((v),(r))
-#endif
-
 struct kvm_vm_stat {
 	ulong remote_tlb_flush;
 };
