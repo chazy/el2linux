@@ -35,6 +35,7 @@
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_host.h>
 #include <asm/kvm_mmu.h>
+#include <asm/kvm_sysregs.h>
 #include <asm/perf_event.h>
 #include <asm/sysreg.h>
 
@@ -127,8 +128,9 @@ static bool access_vm_reg(struct kvm_vcpu *vcpu,
 		vcpu_set_sys_reg(vcpu, r->reg, p->regval);
 	} else {
 		if (!p->is_32bit)
-			vcpu_cp15_64_high(vcpu, r->reg) = upper_32_bits(p->regval);
-		vcpu_cp15_64_low(vcpu, r->reg) = lower_32_bits(p->regval);
+			vcpu_set_cpreg_64(vcpu, r->reg, p->regval);
+		else
+			vcpu_set_cpreg(vcpu, r->reg, p->regval);
 	}
 
 	kvm_toggle_cache(vcpu, was_enabled);
@@ -1094,10 +1096,14 @@ static bool trap_debug32(struct kvm_vcpu *vcpu,
 			 const struct sys_reg_desc *r)
 {
 	if (p->is_write) {
-		vcpu_cp14(vcpu, r->reg) = p->regval;
+		if (r->reg)
+			vcpu_set_cpreg(vcpu, r->reg, p->regval);
 		vcpu->arch.debug_flags |= KVM_ARM64_DEBUG_DIRTY;
 	} else {
-		p->regval = vcpu_cp14(vcpu, r->reg);
+		if (r->reg)
+			p->regval = vcpu_get_cpreg(vcpu, r->reg);
+		else
+			p->regval = 0;
 	}
 
 	return true;
