@@ -189,7 +189,11 @@ early_param("mem", early_mem);
 
 void __init arm64_memblock_init(void)
 {
+#ifndef CONFIG_EL2_KERNEL
 	const s64 linear_region_size = -(s64)PAGE_OFFSET;
+#else
+	const s64 linear_region_size = (VA_START >> 1);
+#endif
 
 	/*
 	 * Ensure that the linear region takes up exactly half of the kernel
