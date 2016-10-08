@@ -39,7 +39,7 @@ static void prepare_fault32(struct kvm_vcpu *vcpu, u32 mode, u32 vect_offset)
 	unsigned long new_spsr_value = *vcpu_cpsr(vcpu);
 	bool is_thumb = (new_spsr_value & COMPAT_PSR_T_BIT);
 	u32 return_offset = (is_thumb) ? 4 : 0;
-	u32 sctlr = vcpu_cp15(vcpu, c1_SCTLR);
+	u32 sctlr = vcpu_get_cpreg(vcpu, c1_SCTLR);
 
 	cpsr = mode | COMPAT_PSR_I_BIT;
 
@@ -58,7 +58,7 @@ static void prepare_fault32(struct kvm_vcpu *vcpu, u32 mode, u32 vect_offset)
 	if (sctlr & (1 << 13))
 		vect_offset += 0xffff0000;
 	else /* always have security exceptions */
-		vect_offset += vcpu_cp15(vcpu, c12_VBAR);
+		vect_offset += vcpu_get_cpreg(vcpu, c12_VBAR);
 
 	*vcpu_pc(vcpu) = vect_offset;
 }
@@ -76,29 +76,31 @@ static void inject_abt32(struct kvm_vcpu *vcpu, bool is_pabt,
 			 unsigned long addr)
 {
 	u32 vect_offset;
-	u32 *far, *fsr;
+	u32 fsr;
+	int far_reg, fsr_reg;
 	bool is_lpae;
 
 	if (is_pabt) {
 		vect_offset = 12;
-		far = &vcpu_cp15(vcpu, c6_IFAR);
-		fsr = &vcpu_cp15(vcpu, c5_IFSR);
+		far_reg = c6_IFAR;
+		fsr_reg = c5_IFSR;
 	} else { /* !iabt */
 		vect_offset = 16;
-		far = &vcpu_cp15(vcpu, c6_DFAR);
-		fsr = &vcpu_cp15(vcpu, c5_DFSR);
+		far_reg = c6_DFAR;
+		fsr_reg = c5_DFSR;
 	}
 
 	prepare_fault32(vcpu, COMPAT_PSR_MODE_ABT | COMPAT_PSR_A_BIT, vect_offset);
 
-	*far = addr;
+	vcpu_set_cpreg(vcpu, far_reg, addr);
 
 	/* Give the guest an IMPLEMENTATION DEFINED exception */
-	is_lpae = (vcpu_cp15(vcpu, c2_TTBCR) >> 31);
+	is_lpae = (vcpu_get_cpreg(vcpu, c2_TTBCR) >> 31);
 	if (is_lpae)
-		*fsr = 1 << 9 | 0x34;
+		fsr = 1 << 9 | 0x34;
 	else
-		*fsr = 0x14;
+		fsr = 0x14;
+	vcpu_set_cpreg(vcpu, fsr_reg, fsr);
 }
 
 enum exception_type {
