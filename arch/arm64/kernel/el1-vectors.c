@@ -88,9 +88,9 @@ void el1_shim_vectors_init(void)
 	pgd_populate(NULL, pgd, el1_shim_pud);
 	pud = pud_offset(pgd, addr);
 	pud_populate(NULL, pud, el1_shim_pmd);
-	pmd = pmd_offset(pud, addr);
+	pmd = pmd_offset_kimg(pud, addr);
 	pmd_populate_kernel(NULL, pmd, el1_shim_pte);
-	pte = pte_offset_kernel(pmd, addr);
+	pte = pte_offset_kimg(pmd, addr);
 	set_pte(pte, pfn_pte(phys >> PAGE_SHIFT, PAGE_KERNEL_EXEC_EL1));
 
 	/*
