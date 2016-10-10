@@ -164,7 +164,12 @@ ENDPROC(cpu_do_switch_mm)
 ENTRY(idmap_cpu_replace_ttbr1)
 	mrs	x2, daif
 	msr	daifset, #0xf
-
+#ifdef CONFIG_EL2_KERNEL
+	msr	ttbr0_el2, x0			// set TTBR0_EL2
+	tlbi	alle2
+	dsb	nsh
+	isb
+#else
 	adrp	x1, empty_zero_page
 	msr	ttbr1_el1, x1
 	isb
@@ -175,7 +180,7 @@ ENTRY(idmap_cpu_replace_ttbr1)
 
 	msr	ttbr1_el1, x0
 	isb
-
+#endif
 	msr	daif, x2
 
 	ret
