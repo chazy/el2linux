@@ -482,6 +482,7 @@ void __init paging_init(void)
 	map_kernel(pgd);
 	map_mem(pgd);
 
+#ifdef CONFIG_EL2_KERNEL
 	/*
 	 * Since we only have ttbr0_el2 in EL2, we need additional entries
 	 * so that we don't lose life in the following pgd swaps.
@@ -489,6 +490,7 @@ void __init paging_init(void)
 	memcpy((pgd_t *)idmap_pg_dir + PTRS_PER_PGD/2,
 		        (pgd_t *)pgd + PTRS_PER_PGD/2, PAGE_SIZE/2);
 	memcpy(pgd, idmap_pg_dir, PAGE_SIZE/2);
+#endif
 
 	/*
 	 * We want to reuse the original swapper_pg_dir so we don't have to
