@@ -199,7 +199,11 @@ lr	.req	x30		// link register
 	 */
 	.macro this_cpu_ptr, sym, reg, tmp
 	adr_l	\reg, \sym
+#ifndef CONFIG_EL2_KERNEL
 	mrs	\tmp, tpidr_el1
+#else
+	mrs	\tmp, tpidr_el2
+#endif
 	add	\reg, \reg, \tmp
 	.endm
 
