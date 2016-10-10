@@ -66,7 +66,6 @@ void el1_shim_vectors_init(void)
 	unsigned long end = ((unsigned long)&__el1_shim_vectors_end) - 1;
 	unsigned long addr = EL1_VECTORS_VADDR;
 	unsigned long kaddr;
-	struct page *page;
 	phys_addr_t phys;
 	pgd_t *pgd;
 	pud_t *pud;
@@ -77,8 +76,7 @@ void el1_shim_vectors_init(void)
 	BUG_ON((start & PAGE_MASK) != (end & PAGE_MASK));
 
 	/* Get the physical address of the shim vectors page */
-	page = virt_to_page(start);
-	phys = page_to_phys(page);
+	phys = __pa(start);
 
 	/*
 	 * Create page tables and map the shim vectors page at
