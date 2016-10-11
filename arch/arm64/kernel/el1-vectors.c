@@ -84,7 +84,7 @@ void el1_shim_vectors_init(void)
 	 */
 	pgd = el1_shim_pgd + pgd_index(addr);
 	pgd_populate(NULL, pgd, el1_shim_pud);
-	pud = pud_offset(pgd, addr);
+	pud = pud_offset_kimg(pgd, addr);
 	pud_populate(NULL, pud, el1_shim_pmd);
 	pmd = pmd_offset_kimg(pud, addr);
 	pmd_populate_kernel(NULL, pmd, el1_shim_pte);
