@@ -81,7 +81,7 @@ static void __hyp_text __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 
 static hyp_alternate_select(__sysreg_call_save_el1_state,
 			    __sysreg_save_el1_state, __sysreg_do_nothing,
-			    ARM64_HAS_VIRT_HOST_EXTN);
+			    ARM64_RUNS_AT_EL2);
 
 static void __hyp_text __sysreg_save_el2_return_state(struct kvm_cpu_context *ctxt)
 {
@@ -91,7 +91,7 @@ static void __hyp_text __sysreg_save_el2_return_state(struct kvm_cpu_context *ct
 
 static hyp_alternate_select(__sysreg_call_save_host_el2_return_state,
 			    __sysreg_save_el2_return_state, __sysreg_do_nothing,
-			    ARM64_HAS_VIRT_HOST_EXTN);
+			    ARM64_RUNS_AT_EL2);
 
 void __hyp_text __sysreg_save_host_state(struct kvm_cpu_context *ctxt)
 {
@@ -150,7 +150,7 @@ static void __hyp_text __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt)
 
 static hyp_alternate_select(__sysreg_call_restore_el1_state,
 			    __sysreg_restore_el1_state, __sysreg_do_nothing,
-			    ARM64_HAS_VIRT_HOST_EXTN);
+			    ARM64_RUNS_AT_EL2);
 
 static void __hyp_text
 __sysreg_restore_el2_return_state(struct kvm_cpu_context *ctxt)
@@ -162,7 +162,7 @@ __sysreg_restore_el2_return_state(struct kvm_cpu_context *ctxt)
 static hyp_alternate_select(__sysreg_call_restore_host_el2_return_state,
 			    __sysreg_restore_el2_return_state,
 			    __sysreg_do_nothing,
-			    ARM64_HAS_VIRT_HOST_EXTN);
+			    ARM64_RUNS_AT_EL2);
 
 void __hyp_text __sysreg_restore_host_state(struct kvm_cpu_context *ctxt)
 {
@@ -198,7 +198,7 @@ static void __hyp_text __sysreg32_do_nothing(struct kvm_vcpu *vcpu) { }
 
 static hyp_alternate_select(__sysreg32_call_save_cp_state,
 			    __sysreg32_save_cp_state, __sysreg32_do_nothing,
-			    ARM64_HAS_VIRT_HOST_EXTN);
+			    ARM64_RUNS_AT_EL2);
 
 void __hyp_text __sysreg32_save_state(struct kvm_vcpu *vcpu)
 {
@@ -230,7 +230,7 @@ static void __hyp_text __sysreg32_restore_cp_state(struct kvm_vcpu *vcpu)
 
 static hyp_alternate_select(__sysreg32_call_restore_cp_state,
 			    __sysreg32_restore_cp_state, __sysreg32_do_nothing,
-			    ARM64_HAS_VIRT_HOST_EXTN);
+			    ARM64_RUNS_AT_EL2);
 
 void __hyp_text __sysreg32_restore_state(struct kvm_vcpu *vcpu)
 {
@@ -344,6 +344,10 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 	host_ctxt->gp_regs.regs.pc	= read_sysreg_el2(elr);
 	host_ctxt->gp_regs.regs.pstate	= read_sysreg_el2(spsr);
 
+#ifdef CONFIG_EL2_KERNEL
+	__sysreg_save_el1_state(host_ctxt);
+#endif
+
 	/* Load guest EL1 and user state */
 	__sysreg_restore_el1_state(guest_ctxt);
 	if (!(vcpu->arch.hcr_el2 & HCR_RW))
@@ -389,6 +393,10 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 	__sysreg_restore_user_state(host_ctxt);
 	write_sysreg_el2(host_ctxt->gp_regs.regs.pc,	  elr);
 	write_sysreg_el2(host_ctxt->gp_regs.regs.pstate, spsr);
+
+#ifdef CONFIG_EL2_KERNEL
+	__sysreg_restore_el1_state(host_ctxt);
+#endif
 
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = false;
 }
