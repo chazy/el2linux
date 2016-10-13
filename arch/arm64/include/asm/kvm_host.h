@@ -389,6 +389,8 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu);
 void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu);
 #ifdef CONFIG_EL2_KERNEL
 extern void disable_phys_timer(void);
+void kvm_vcpu_save_vmconfig(struct kvm_vcpu *vcpu);
+void kvm_vcpu_restore_vmconfig(struct kvm_vcpu *vcpu);
 #endif
 
 #endif /* __ARM64_KVM_HOST_H__ */

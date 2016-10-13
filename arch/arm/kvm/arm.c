@@ -306,6 +306,9 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	vcpu->arch.host_cpu_context = this_cpu_ptr(kvm_host_cpu_state);
 
 	kvm_arm_set_running_vcpu(vcpu);
+#ifdef CONFIG_EL2_KERNEL
+	kvm_vcpu_restore_vmconfig(vcpu);
+#endif
 }
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
@@ -321,6 +324,9 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 
 	kvm_arm_set_running_vcpu(NULL);
 	kvm_timer_vcpu_put(vcpu);
+#ifdef CONFIG_EL2_KERNEL
+	kvm_vcpu_save_vmconfig(vcpu);
+#endif
 }
 
 int kvm_arch_vcpu_ioctl_get_mpstate(struct kvm_vcpu *vcpu,

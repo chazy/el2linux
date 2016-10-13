@@ -29,6 +29,71 @@ static bool __hyp_text __fpsimd_enabled_vhe(void)
 	return !!(read_sysreg(cpacr_el1) & CPACR_EL1_FPEN);
 }
 
+static void __hyp_text __activate_fpsimd_nvhe(struct kvm_vcpu *vcpu)
+{
+	u64 val;
+
+	val = CPTR_EL2_DEFAULT;
+	val |= CPTR_EL2_TTA;
+	if (vcpu->arch.guest_vfp_loaded)
+		val &= ~CPTR_EL2_TFP;
+	else
+		val |= CPTR_EL2_TFP;
+	write_sysreg(val, cptr_el2);
+}
+
+static void __hyp_text __deactivate_fpsimd_nvhe(void)
+{
+	write_sysreg(CPTR_EL2_DEFAULT, cptr_el2);
+}
+
+static void __hyp_text __activate_traps_vm(struct kvm_vcpu *vcpu)
+{
+	u64 val;
+
+	/*
+	 * We are about to set CPTR_EL2.TFP to trap all floating point
+	 * register accesses to EL2, however, the ARM ARM clearly states that
+	 * traps are only taken to EL2 if the operation would not otherwise
+	 * trap to EL1.  Therefore, always make sure that for 32-bit guests,
+	 * we set FPEXC.EN to prevent traps to EL1, when setting the TFP bit.
+	 */
+	val = vcpu->arch.hcr_el2;
+	if (!(val & HCR_RW) && !vcpu->arch.guest_vfp_loaded) {
+		write_sysreg(1 << 30, fpexc32_el2);
+		isb();
+	}
+	write_sysreg(val, hcr_el2);
+	/* Trap on AArch32 cp15 c15 accesses (EL1 or EL0) */
+	write_sysreg(1 << 15, hstr_el2);
+	/* Make sure we trap PMU access from EL0 to EL2 */
+	write_sysreg(ARMV8_PMU_USERENR_MASK, pmuserenr_el0);
+	write_sysreg(vcpu->arch.mdcr_el2, mdcr_el2);
+}
+
+static void __hyp_text __deactivate_traps_vm(void)
+{
+	write_sysreg(0, hstr_el2);
+	write_sysreg(read_sysreg(mdcr_el2) & MDCR_EL2_HPMN_MASK, mdcr_el2);
+	write_sysreg(0, pmuserenr_el0);
+}
+
+#ifdef CONFIG_EL2_KERNEL
+void kvm_vcpu_save_vmconfig(struct kvm_vcpu *vcpu)
+{
+	write_sysreg(EL2_HOST_HCR, hcr_el2);
+	__deactivate_fpsimd_nvhe();
+	__deactivate_traps_vm();
+}
+
+void kvm_vcpu_restore_vmconfig(struct kvm_vcpu *vcpu)
+{
+	write_sysreg(vcpu->arch.hcr_el2, hcr_el2);
+	__activate_traps_vm(vcpu);
+	__activate_fpsimd_nvhe(vcpu);
+}
+#endif
+
 static hyp_alternate_select(__fpsimd_is_enabled,
 			    __fpsimd_enabled_nvhe, __fpsimd_enabled_vhe,
 			    ARM64_HAS_VIRT_HOST_EXTN);
@@ -55,17 +120,9 @@ static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
 
 static void __hyp_text __activate_traps_nvhe(struct kvm_vcpu *vcpu)
 {
-	u64 val;
-
-	val = CPTR_EL2_DEFAULT;
-	val |= CPTR_EL2_TTA;
-	if (vcpu->arch.guest_vfp_loaded)
-		val &= ~CPTR_EL2_TFP;
-	else
-		val |= CPTR_EL2_TFP;
-	write_sysreg(val, cptr_el2);
-
-#ifdef CONFIG_EL2_KERNEL
+#ifndef CONFIG_EL2_KERNEL
+	__activate_fpsimd_nvhe(vcpu);
+#else
 	write_sysreg(__kvm_hyp_vector, vbar_el2);
 #endif
 }
@@ -76,26 +133,9 @@ static hyp_alternate_select(__activate_traps_arch,
 
 static void __hyp_text __activate_traps(struct kvm_vcpu *vcpu)
 {
-	u64 val;
-
-	/*
-	 * We are about to set CPTR_EL2.TFP to trap all floating point
-	 * register accesses to EL2, however, the ARM ARM clearly states that
-	 * traps are only taken to EL2 if the operation would not otherwise
-	 * trap to EL1.  Therefore, always make sure that for 32-bit guests,
-	 * we set FPEXC.EN to prevent traps to EL1, when setting the TFP bit.
-	 */
-	val = vcpu->arch.hcr_el2;
-	if (!(val & HCR_RW) && !vcpu->arch.guest_vfp_loaded) {
-		write_sysreg(1 << 30, fpexc32_el2);
-		isb();
-	}
-	write_sysreg(val, hcr_el2);
-	/* Trap on AArch32 cp15 c15 accesses (EL1 or EL0) */
-	write_sysreg(1 << 15, hstr_el2);
-	/* Make sure we trap PMU access from EL0 to EL2 */
-	write_sysreg(ARMV8_PMU_USERENR_MASK, pmuserenr_el0);
-	write_sysreg(vcpu->arch.mdcr_el2, mdcr_el2);
+#ifndef CONFIG_EL2_KERNEL
+	__activate_traps_vm(vcpu);
+#endif
 	__activate_traps_arch()(vcpu);
 }
 
@@ -114,10 +154,11 @@ static void __hyp_text __deactivate_traps_nvhe(void)
 	extern char vectors[];	/* kernel exception vectors */
 
 	write_sysreg(vectors, vbar_el2);
-#endif
+#else
 
 	write_sysreg(EL2_HOST_HCR, hcr_el2);
-	write_sysreg(CPTR_EL2_DEFAULT, cptr_el2);
+	__deactivate_fpsimd_nvhe();
+#endif
 }
 
 static hyp_alternate_select(__deactivate_traps_arch,
@@ -127,9 +168,9 @@ static hyp_alternate_select(__deactivate_traps_arch,
 static void __hyp_text __deactivate_traps(struct kvm_vcpu *vcpu)
 {
 	__deactivate_traps_arch()();
-	write_sysreg(0, hstr_el2);
-	write_sysreg(read_sysreg(mdcr_el2) & MDCR_EL2_HPMN_MASK, mdcr_el2);
-	write_sysreg(0, pmuserenr_el0);
+#ifndef CONFIG_EL2_KERNEL
+	__deactivate_traps_vm();
+#endif
 }
 
 static void __hyp_text __activate_vm(struct kvm_vcpu *vcpu)
