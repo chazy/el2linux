@@ -78,22 +78,6 @@ static void __hyp_text __deactivate_traps_vm(void)
 	write_sysreg(0, pmuserenr_el0);
 }
 
-#ifdef CONFIG_EL2_KERNEL
-void kvm_vcpu_save_vmconfig(struct kvm_vcpu *vcpu)
-{
-	write_sysreg(EL2_HOST_HCR, hcr_el2);
-	__deactivate_fpsimd_nvhe();
-	__deactivate_traps_vm();
-}
-
-void kvm_vcpu_restore_vmconfig(struct kvm_vcpu *vcpu)
-{
-	write_sysreg(vcpu->arch.hcr_el2, hcr_el2);
-	__activate_traps_vm(vcpu);
-	__activate_fpsimd_nvhe(vcpu);
-}
-#endif
-
 static hyp_alternate_select(__fpsimd_is_enabled,
 			    __fpsimd_enabled_nvhe, __fpsimd_enabled_vhe,
 			    ARM64_HAS_VIRT_HOST_EXTN);
@@ -216,6 +200,23 @@ static hyp_alternate_select(__check_arm_834220,
 			    __false_value, __true_value,
 			    ARM64_WORKAROUND_834220);
 
+#ifdef CONFIG_EL2_KERNEL
+void kvm_vcpu_save_vmconfig(struct kvm_vcpu *vcpu)
+{
+	write_sysreg(EL2_HOST_HCR, hcr_el2);
+	__deactivate_fpsimd_nvhe();
+	__deactivate_traps_vm();
+	__deactivate_vm(vcpu);
+}
+
+void kvm_vcpu_restore_vmconfig(struct kvm_vcpu *vcpu)
+{
+	write_sysreg(vcpu->arch.hcr_el2, hcr_el2);
+	__activate_traps_vm(vcpu);
+	__activate_fpsimd_nvhe(vcpu);
+}
+#endif
+
 static bool __hyp_text __translate_far_to_hpfar(u64 far, u64 *hpfar)
 {
 	u64 par, tmp;
@@ -334,7 +335,9 @@ again:
 	__vgic_save_state(vcpu);
 
 	__deactivate_traps(vcpu);
+#ifndef CONFIG_EL2_KERNEL
 	__deactivate_vm(vcpu);
+#endif
 
 	__sysreg_restore_host_state(host_ctxt);
 
