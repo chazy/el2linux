@@ -311,10 +311,13 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 #ifdef CONFIG_EL2_KERNEL
 	kvm_vcpu_restore_vmconfig(vcpu);
 #endif
+	kvm_timer_vcpu_load(vcpu);
 }
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
+	kvm_timer_vcpu_put(vcpu);
+
 	kvm_vcpu_put_sysregs(vcpu);
 	kvm_vgic_put(vcpu);
 
@@ -326,7 +329,6 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 	vcpu->cpu = -1;
 
 	kvm_arm_set_running_vcpu(NULL);
-	kvm_timer_vcpu_put(vcpu);
 #ifdef CONFIG_EL2_KERNEL
 	kvm_vcpu_save_vmconfig(vcpu);
 #endif
@@ -609,7 +611,6 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 
 		local_irq_disable();
 
-		kvm_timer_flush_hwstate(vcpu);
 		kvm_vgic_flush_hwstate(vcpu);
 
 		/*
@@ -650,9 +651,8 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		kvm_arm_clear_debug(vcpu);
 
 		/*
-		 * Sync the timer hardware state before enabling interrupts as
-		 * we don't want to handle vtimer interrupts in the host
-		 * kernel.
+		 * Sync timer state before enabling interrupts as the sync
+		 * must not collide with a timer interrupt.
 		 */
 		kvm_timer_sync_hwstate(vcpu);
 
