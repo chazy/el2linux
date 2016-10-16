@@ -31,8 +31,8 @@ struct arch_timer_context {
 	/* Timer IRQ */
 	struct kvm_irq_level		irq;
 
-	/* Active IRQ state caching */
-	bool				active_cleared_last;
+	/* Is the timer state loaded on the hardware timer */
+	bool			loaded;
 
 	/* Virtual offset */
 	u64			cntvoff;
@@ -80,10 +80,15 @@ void kvm_timer_unschedule(struct kvm_vcpu *vcpu);
 
 u64 kvm_phys_timer_read(void);
 
+void kvm_timer_vcpu_load(struct kvm_vcpu *vcpu);
 void kvm_timer_vcpu_put(struct kvm_vcpu *vcpu);
 
 void kvm_timer_init_vhe(void);
 
 #define vcpu_vtimer(v)	(&(v)->arch.timer_cpu.vtimer)
 #define vcpu_ptimer(v)	(&(v)->arch.timer_cpu.ptimer)
+
+void enable_el1_phys_timer_access(void);
+void disable_el1_phys_timer_access(void);
+
 #endif
