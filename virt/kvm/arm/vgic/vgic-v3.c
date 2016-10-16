@@ -70,6 +70,7 @@ void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu)
 	struct vgic_v3_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v3;
 	u32 model = vcpu->kvm->arch.vgic.vgic_model;
 	int lr;
+	unsigned long flags;
 
 	for (lr = 0; lr < vcpu->arch.vgic_cpu.used_lrs; lr++) {
 		u64 val = cpuif->vgic_lr[lr];
@@ -84,7 +85,7 @@ void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu)
 		if (!irq)	/* An LPI could have been unmapped. */
 			continue;
 
-		spin_lock(&irq->irq_lock);
+		spin_lock_irqsave(&irq->irq_lock, flags);
 
 		/* Always preserve the active bit */
 		irq->active = !!(val & ICH_LR_ACTIVE_BIT);
@@ -114,7 +115,7 @@ void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu)
 			irq->pending = irq->line_level || irq->soft_pending;
 		}
 
-		spin_unlock(&irq->irq_lock);
+		spin_unlock_irqrestore(&irq->irq_lock, flags);
 		vgic_put_irq(vcpu->kvm, irq);
 	}
 }

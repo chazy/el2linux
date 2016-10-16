@@ -127,6 +127,7 @@ static void vgic_mmio_write_irouter(struct kvm_vcpu *vcpu,
 {
 	int intid = VGIC_ADDR_TO_INTID(addr, 64);
 	struct vgic_irq *irq;
+	unsigned long flags;
 
 	/* The upper word is WI for us since we don't implement Aff3. */
 	if (addr & 4)
@@ -137,13 +138,13 @@ static void vgic_mmio_write_irouter(struct kvm_vcpu *vcpu,
 	if (!irq)
 		return;
 
-	spin_lock(&irq->irq_lock);
+	spin_lock_irqsave(&irq->irq_lock, flags);
 
 	/* We only care about and preserve Aff0, Aff1 and Aff2. */
 	irq->mpidr = val & GENMASK(23, 0);
 	irq->target_vcpu = kvm_mpidr_to_vcpu(vcpu->kvm, irq->mpidr);
 
-	spin_unlock(&irq->irq_lock);
+	spin_unlock_irqrestore(&irq->irq_lock, flags);
 	vgic_put_irq(vcpu->kvm, irq);
 }
 
@@ -607,6 +608,7 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 	int sgi, c;
 	int vcpu_id = vcpu->vcpu_id;
 	bool broadcast;
+	unsigned long flags;
 
 	sgi = (reg & ICC_SGI1R_SGI_ID_MASK) >> ICC_SGI1R_SGI_ID_SHIFT;
 	broadcast = reg & BIT(ICC_SGI1R_IRQ_ROUTING_MODE_BIT);
@@ -645,10 +647,10 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 
 		irq = vgic_get_irq(vcpu->kvm, c_vcpu, sgi);
 
-		spin_lock(&irq->irq_lock);
+		spin_lock_irqsave(&irq->irq_lock, flags);
 		irq->pending = true;
 
-		vgic_queue_irq_unlock(vcpu->kvm, irq);
+		vgic_queue_irq_unlock(vcpu->kvm, irq, flags);
 		vgic_put_irq(vcpu->kvm, irq);
 	}
 }

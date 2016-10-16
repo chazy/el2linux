@@ -74,6 +74,7 @@ void vgic_mmio_write_sgir(struct kvm_vcpu *source_vcpu,
 	int mode = (val >> 24) & 0x03;
 	int c;
 	struct kvm_vcpu *vcpu;
+	unsigned long flags;
 
 	switch (mode) {
 	case 0x0:		/* as specified by targets */
@@ -97,11 +98,11 @@ void vgic_mmio_write_sgir(struct kvm_vcpu *source_vcpu,
 
 		irq = vgic_get_irq(source_vcpu->kvm, vcpu, intid);
 
-		spin_lock(&irq->irq_lock);
+		spin_lock_irqsave(&irq->irq_lock, flags);
 		irq->pending = true;
 		irq->source |= 1U << source_vcpu->vcpu_id;
 
-		vgic_queue_irq_unlock(source_vcpu->kvm, irq);
+		vgic_queue_irq_unlock(source_vcpu->kvm, irq, flags);
 		vgic_put_irq(source_vcpu->kvm, irq);
 	}
 }
@@ -130,6 +131,7 @@ static void vgic_mmio_write_target(struct kvm_vcpu *vcpu,
 {
 	u32 intid = VGIC_ADDR_TO_INTID(addr, 8);
 	int i;
+	unsigned long flags;
 
 	/* GICD_ITARGETSR[0-7] are read-only */
 	if (intid < VGIC_NR_PRIVATE_IRQS)
@@ -139,13 +141,13 @@ static void vgic_mmio_write_target(struct kvm_vcpu *vcpu,
 		struct vgic_irq *irq = vgic_get_irq(vcpu->kvm, NULL, intid + i);
 		int target;
 
-		spin_lock(&irq->irq_lock);
+		spin_lock_irqsave(&irq->irq_lock, flags);
 
 		irq->targets = (val >> (i * 8)) & 0xff;
 		target = irq->targets ? __ffs(irq->targets) : 0;
 		irq->target_vcpu = kvm_get_vcpu(vcpu->kvm, target);
 
-		spin_unlock(&irq->irq_lock);
+		spin_unlock_irqrestore(&irq->irq_lock, flags);
 		vgic_put_irq(vcpu->kvm, irq);
 	}
 }
@@ -173,17 +175,18 @@ static void vgic_mmio_write_sgipendc(struct kvm_vcpu *vcpu,
 {
 	u32 intid = addr & 0x0f;
 	int i;
+	unsigned long flags;
 
 	for (i = 0; i < len; i++) {
 		struct vgic_irq *irq = vgic_get_irq(vcpu->kvm, vcpu, intid + i);
 
-		spin_lock(&irq->irq_lock);
+		spin_lock_irqsave(&irq->irq_lock, flags);
 
 		irq->source &= ~((val >> (i * 8)) & 0xff);
 		if (!irq->source)
 			irq->pending = false;
 
-		spin_unlock(&irq->irq_lock);
+		spin_unlock_irqrestore(&irq->irq_lock, flags);
 		vgic_put_irq(vcpu->kvm, irq);
 	}
 }
@@ -194,19 +197,20 @@ static void vgic_mmio_write_sgipends(struct kvm_vcpu *vcpu,
 {
 	u32 intid = addr & 0x0f;
 	int i;
+	unsigned long flags;
 
 	for (i = 0; i < len; i++) {
 		struct vgic_irq *irq = vgic_get_irq(vcpu->kvm, vcpu, intid + i);
 
-		spin_lock(&irq->irq_lock);
+		spin_lock_irqsave(&irq->irq_lock, flags);
 
 		irq->source |= (val >> (i * 8)) & 0xff;
 
 		if (irq->source) {
 			irq->pending = true;
-			vgic_queue_irq_unlock(vcpu->kvm, irq);
+			vgic_queue_irq_unlock(vcpu->kvm, irq, flags);
 		} else {
-			spin_unlock(&irq->irq_lock);
+			spin_unlock_irqrestore(&irq->irq_lock, flags);
 		}
 		vgic_put_irq(vcpu->kvm, irq);
 	}

@@ -50,6 +50,10 @@ struct vgic_global __section(.hyp.text) kvm_vgic_global_state;
  *   vcpuX->vcpu_id < vcpuY->vcpu_id:
  *     spin_lock(vcpuX->arch.vgic_cpu.ap_list_lock);
  *     spin_lock(vcpuY->arch.vgic_cpu.ap_list_lock);
+ *
+ * Since the VGIC must support injecting virtual interrupts from ISRs, we have
+ * to use the spin_lock_irqsave/spin_unlock_irqrestore versions of outer
+ * spinlocks for any lock that may be taken while injecting an interrupt.
  */
 
 /*
@@ -254,7 +258,8 @@ static bool vgic_validate_injection(struct vgic_irq *irq, bool level)
  * Needs to be entered with the IRQ lock already held, but will return
  * with all locks dropped.
  */
-bool vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq)
+bool vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
+			   unsigned long flags)
 {
 	struct kvm_vcpu *vcpu;
 
@@ -272,7 +277,7 @@ retry:
 		 * not need to be inserted into an ap_list and there is also
 		 * no more work for us to do.
 		 */
-		spin_unlock(&irq->irq_lock);
+		spin_unlock_irqrestore(&irq->irq_lock, flags);
 
 		/*
 		 * If the VCPU is not NULL, we could be queueing an
@@ -291,11 +296,11 @@ retry:
 	 * We must unlock the irq lock to take the ap_list_lock where
 	 * we are going to insert this new pending interrupt.
 	 */
-	spin_unlock(&irq->irq_lock);
+	spin_unlock_irqrestore(&irq->irq_lock, flags);
 
 	/* someone can do stuff here, which we re-check below */
 
-	spin_lock(&vcpu->arch.vgic_cpu.ap_list_lock);
+	spin_lock_irqsave(&vcpu->arch.vgic_cpu.ap_list_lock, flags);
 	spin_lock(&irq->irq_lock);
 
 	/*
@@ -312,9 +317,9 @@ retry:
 
 	if (unlikely(irq->vcpu || vcpu != vgic_target_oracle(irq))) {
 		spin_unlock(&irq->irq_lock);
-		spin_unlock(&vcpu->arch.vgic_cpu.ap_list_lock);
+		spin_unlock_irqrestore(&vcpu->arch.vgic_cpu.ap_list_lock, flags);
 
-		spin_lock(&irq->irq_lock);
+		spin_lock_irqsave(&irq->irq_lock, flags);
 		goto retry;
 	}
 
@@ -327,7 +332,7 @@ retry:
 	irq->vcpu = vcpu;
 
 	spin_unlock(&irq->irq_lock);
-	spin_unlock(&vcpu->arch.vgic_cpu.ap_list_lock);
+	spin_unlock_irqrestore(&vcpu->arch.vgic_cpu.ap_list_lock, flags);
 
 	kvm_vcpu_kick(vcpu);
 
@@ -340,6 +345,7 @@ static int vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 {
 	struct kvm_vcpu *vcpu;
 	struct vgic_irq *irq;
+	unsigned long flags;
 	int ret;
 
 	trace_vgic_update_irq_pending(cpuid, intid, level);
@@ -361,11 +367,11 @@ static int vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 		return -EINVAL;
 	}
 
-	spin_lock(&irq->irq_lock);
+	spin_lock_irqsave(&irq->irq_lock, flags);
 
 	if (!vgic_validate_injection(irq, level)) {
 		/* Nothing to see here, move along... */
-		spin_unlock(&irq->irq_lock);
+		spin_unlock_irqrestore(&irq->irq_lock, flags);
 		vgic_put_irq(kvm, irq);
 		return 0;
 	}
@@ -377,7 +383,7 @@ static int vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 		irq->pending = true;
 	}
 
-	vgic_queue_irq_unlock(kvm, irq);
+	vgic_queue_irq_unlock(kvm, irq, flags);
 	vgic_put_irq(kvm, irq);
 
 	return 0;
@@ -412,15 +418,16 @@ int kvm_vgic_inject_mapped_irq(struct kvm *kvm, int cpuid, unsigned int intid,
 int kvm_vgic_map_phys_irq(struct kvm_vcpu *vcpu, u32 virt_irq, u32 phys_irq)
 {
 	struct vgic_irq *irq = vgic_get_irq(vcpu->kvm, vcpu, virt_irq);
+	unsigned long flags;
 
 	BUG_ON(!irq);
 
-	spin_lock(&irq->irq_lock);
+	spin_lock_irqsave(&irq->irq_lock, flags);
 
 	irq->hw = true;
 	irq->hwintid = phys_irq;
 
-	spin_unlock(&irq->irq_lock);
+	spin_unlock_irqrestore(&irq->irq_lock, flags);
 	vgic_put_irq(vcpu->kvm, irq);
 
 	return 0;
@@ -429,6 +436,7 @@ int kvm_vgic_map_phys_irq(struct kvm_vcpu *vcpu, u32 virt_irq, u32 phys_irq)
 int kvm_vgic_unmap_phys_irq(struct kvm_vcpu *vcpu, unsigned int virt_irq)
 {
 	struct vgic_irq *irq;
+	unsigned long flags;
 
 	if (!vgic_initialized(vcpu->kvm))
 		return -EAGAIN;
@@ -436,12 +444,12 @@ int kvm_vgic_unmap_phys_irq(struct kvm_vcpu *vcpu, unsigned int virt_irq)
 	irq = vgic_get_irq(vcpu->kvm, vcpu, virt_irq);
 	BUG_ON(!irq);
 
-	spin_lock(&irq->irq_lock);
+	spin_lock_irqsave(&irq->irq_lock, flags);
 
 	irq->hw = false;
 	irq->hwintid = 0;
 
-	spin_unlock(&irq->irq_lock);
+	spin_unlock_irqrestore(&irq->irq_lock, flags);
 	vgic_put_irq(vcpu->kvm, irq);
 
 	return 0;
@@ -459,9 +467,10 @@ static void vgic_prune_ap_list(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_irq *irq, *tmp;
+	unsigned long flags;
 
 retry:
-	spin_lock(&vgic_cpu->ap_list_lock);
+	spin_lock_irqsave(&vgic_cpu->ap_list_lock, flags);
 
 	list_for_each_entry_safe(irq, tmp, &vgic_cpu->ap_list_head, ap_list) {
 		struct kvm_vcpu *target_vcpu, *vcpuA, *vcpuB;
@@ -501,7 +510,7 @@ retry:
 		/* This interrupt looks like it has to be migrated. */
 
 		spin_unlock(&irq->irq_lock);
-		spin_unlock(&vgic_cpu->ap_list_lock);
+		spin_unlock_irqrestore(&vgic_cpu->ap_list_lock, flags);
 
 		/*
 		 * Ensure locking order by always locking the smallest
@@ -515,7 +524,7 @@ retry:
 			vcpuB = vcpu;
 		}
 
-		spin_lock(&vcpuA->arch.vgic_cpu.ap_list_lock);
+		spin_lock_irqsave(&vcpuA->arch.vgic_cpu.ap_list_lock, flags);
 		spin_lock_nested(&vcpuB->arch.vgic_cpu.ap_list_lock,
 				 SINGLE_DEPTH_NESTING);
 		spin_lock(&irq->irq_lock);
@@ -539,11 +548,11 @@ retry:
 
 		spin_unlock(&irq->irq_lock);
 		spin_unlock(&vcpuB->arch.vgic_cpu.ap_list_lock);
-		spin_unlock(&vcpuA->arch.vgic_cpu.ap_list_lock);
+		spin_unlock_irqrestore(&vcpuA->arch.vgic_cpu.ap_list_lock, flags);
 		goto retry;
 	}
 
-	spin_unlock(&vgic_cpu->ap_list_lock);
+	spin_unlock_irqrestore(&vgic_cpu->ap_list_lock, flags);
 }
 
 static inline void vgic_process_maintenance_interrupt(struct kvm_vcpu *vcpu)
@@ -675,6 +684,8 @@ void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 	if (list_empty(&vcpu->arch.vgic_cpu.ap_list_head))
 		return;
 
+	DEBUG_SPINLOCK_BUG_ON(!irqs_disabled());
+
 	spin_lock(&vcpu->arch.vgic_cpu.ap_list_lock);
 	vgic_flush_lr_state(vcpu);
 	spin_unlock(&vcpu->arch.vgic_cpu.ap_list_lock);
@@ -695,11 +706,12 @@ int kvm_vgic_vcpu_pending_irq(struct kvm_vcpu *vcpu)
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_irq *irq;
 	bool pending = false;
+	unsigned long flags;
 
 	if (!vcpu->kvm->arch.vgic.enabled)
 		return false;
 
-	spin_lock(&vgic_cpu->ap_list_lock);
+	spin_lock_irqsave(&vgic_cpu->ap_list_lock, flags);
 
 	list_for_each_entry(irq, &vgic_cpu->ap_list_head, ap_list) {
 		spin_lock(&irq->irq_lock);
@@ -710,7 +722,7 @@ int kvm_vgic_vcpu_pending_irq(struct kvm_vcpu *vcpu)
 			break;
 	}
 
-	spin_unlock(&vgic_cpu->ap_list_lock);
+	spin_unlock_irqrestore(&vgic_cpu->ap_list_lock, flags);
 
 	return pending;
 }
@@ -734,6 +746,8 @@ bool kvm_vgic_map_is_active(struct kvm_vcpu *vcpu, unsigned int virt_irq)
 {
 	struct vgic_irq *irq = vgic_get_irq(vcpu->kvm, vcpu, virt_irq);
 	bool map_is_active;
+
+	DEBUG_SPINLOCK_BUG_ON(!irqs_disabled());
 
 	spin_lock(&irq->irq_lock);
 	map_is_active = irq->hw && irq->active;
