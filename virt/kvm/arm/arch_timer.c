@@ -349,8 +349,6 @@ void kvm_timer_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
 
-	BUG_ON(timer_is_armed(timer));
-
 	/*
 	 * If we entered the guest with the timer output asserted we have to
 	 * check if the guest has modified the timer so that we should lower
