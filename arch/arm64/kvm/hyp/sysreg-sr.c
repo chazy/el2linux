@@ -38,8 +38,10 @@ static void __hyp_text __sysreg_do_nothing(struct kvm_cpu_context *ctxt) { }
 
 static void __hyp_text __sysreg_save_common_state(struct kvm_cpu_context *ctxt)
 {
+#ifndef CONFIG_EL2_KERNEL
 	ctxt->sys_regs[TPIDR_EL1]	= read_sysreg(tpidr_el1);
 	ctxt->sys_regs[MDSCR_EL1]	= read_sysreg(mdscr_el1);
+#endif
 	ctxt->gp_regs.regs.sp		= read_sysreg(sp_el0);
 }
 
@@ -48,6 +50,7 @@ static void __hyp_text __sysreg_save_user_state(struct kvm_cpu_context *ctxt)
 	ctxt->sys_regs[ACTLR_EL1]	= read_sysreg(actlr_el1);
 	ctxt->sys_regs[TPIDR_EL0]	= read_sysreg(tpidr_el0);
 	ctxt->sys_regs[TPIDRRO_EL0]	= read_sysreg(tpidrro_el0);
+
 }
 
 static void __hyp_text __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
@@ -69,6 +72,10 @@ static void __hyp_text __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 	ctxt->sys_regs[AMAIR_EL1]	= read_sysreg_el1(amair);
 	ctxt->sys_regs[CNTKCTL_EL1]	= read_sysreg_el1(cntkctl);
 	ctxt->sys_regs[PAR_EL1]		= read_sysreg(par_el1);
+#ifdef CONFIG_EL2_KERNEL
+	ctxt->sys_regs[MDSCR_EL1]       = read_sysreg(mdscr_el1);
+	ctxt->sys_regs[TPIDR_EL1]       = read_sysreg(tpidr_el1);
+#endif
 
 	ctxt->gp_regs.sp_el1		= read_sysreg(sp_el1);
 	ctxt->gp_regs.elr_el1		= read_sysreg_el1(elr);
@@ -107,8 +114,10 @@ void __hyp_text __sysreg_save_guest_state(struct kvm_cpu_context *ctxt)
 
 static void __hyp_text __sysreg_restore_common_state(struct kvm_cpu_context *ctxt)
 {
+#ifndef CONFIG_EL2_KERNEL
 	write_sysreg(ctxt->sys_regs[TPIDR_EL1],	  tpidr_el1);
 	write_sysreg(ctxt->sys_regs[MDSCR_EL1],	  mdscr_el1);
+#endif
 	write_sysreg(ctxt->gp_regs.regs.sp,	  sp_el0);
 }
 
@@ -138,6 +147,10 @@ static void __hyp_text __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt)
 	write_sysreg_el1(ctxt->sys_regs[AMAIR_EL1],	amair);
 	write_sysreg_el1(ctxt->sys_regs[CNTKCTL_EL1], 	cntkctl);
 	write_sysreg(ctxt->sys_regs[PAR_EL1],		par_el1);
+#ifdef CONFIG_EL2_KERNEL
+	write_sysreg(ctxt->sys_regs[MDSCR_EL1],         mdscr_el1);
+	write_sysreg(ctxt->sys_regs[TPIDR_EL1],   	tpidr_el1);
+#endif
 
 	write_sysreg(ctxt->gp_regs.sp_el1,		sp_el1);
 	write_sysreg_el1(ctxt->gp_regs.elr_el1,		elr);
@@ -338,7 +351,9 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 	guest_ctxt = &vcpu->arch.ctxt;
 
 	/* Save host user state */
+#ifndef CONFIG_EL2_KERNEL
 	__sysreg_save_user_state(host_ctxt);
+#endif
 	host_ctxt->gp_regs.regs.pc	= read_sysreg_el2(elr);
 	host_ctxt->gp_regs.regs.pstate	= read_sysreg_el2(spsr);
 
@@ -388,7 +403,9 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 		__sysreg32_save_cp_state(vcpu);
 
 	/* Restore host user state */
+#ifndef CONFIG_EL2_KERNEL
 	__sysreg_restore_user_state(host_ctxt);
+#endif
 	write_sysreg_el2(host_ctxt->gp_regs.regs.pc,	  elr);
 	write_sysreg_el2(host_ctxt->gp_regs.regs.pstate, spsr);
 
