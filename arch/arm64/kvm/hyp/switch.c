@@ -18,6 +18,7 @@
 #include <linux/types.h>
 #include <asm/kvm_asm.h>
 #include <asm/kvm_hyp.h>
+#include <asm/debug-monitors.h>
 
 static bool __hyp_text __fpsimd_enabled_nvhe(void)
 {
@@ -246,6 +247,13 @@ static bool __hyp_text __translate_far_to_hpfar(u64 far, u64 *hpfar)
 	return true;
 }
 
+static inline bool __is_debug_dirty(struct kvm_vcpu *vcpu)
+{
+	return (vcpu->arch.ctxt.sys_regs[MDSCR_EL1] & DBG_MDSCR_KDE) ||
+		(vcpu->arch.ctxt.sys_regs[MDSCR_EL1] & DBG_MDSCR_MDE) ||
+		(vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY);
+}
+
 static bool __hyp_text __populate_fault_info(struct kvm_vcpu *vcpu)
 {
 	u64 esr = read_sysreg_el2(esr);
@@ -315,7 +323,10 @@ static int __hyp_text __guest_run(struct kvm_vcpu *vcpu)
 	 */
 	__sysreg32_restore_state(vcpu);
 	__sysreg_restore_guest_state(guest_ctxt);
-	__debug_restore_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
+	if (__is_debug_dirty(vcpu)) {
+		__debug_cond_save_host_state(vcpu);
+		__debug_restore_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
+	}
 
 	/* Jump in the fire! */
 again:
@@ -338,11 +349,13 @@ again:
 #ifndef CONFIG_EL2_KERNEL
 	__deactivate_vm(vcpu);
 #endif
+	if (__is_debug_dirty(vcpu)) {
+		__debug_save_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
+		__debug_cond_restore_host_state(vcpu);
+	}
 
 	__sysreg_restore_host_state(host_ctxt);
 
-	__debug_save_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
-	__debug_cond_restore_host_state(vcpu);
 
 	return exit_code;
 }
