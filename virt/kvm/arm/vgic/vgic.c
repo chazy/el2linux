@@ -273,6 +273,17 @@ retry:
 		 * no more work for us to do.
 		 */
 		spin_unlock(&irq->irq_lock);
+
+		/*
+		 * If the VCPU is not NULL, we could be queueing an
+		 * edge-triggered interrupt for a VCPU which is already
+		 * running and is not about to exit, because the VCPU has
+		 * entered the VM with the interrupt pending and it wouldn't
+		 * trap on EOI. To ensure prompt delivery of that interrupt,
+		 * we have to try to kick the VCPU.
+		 */
+		if (vcpu)
+			kvm_vcpu_kick(vcpu);
 		return false;
 	}
 
