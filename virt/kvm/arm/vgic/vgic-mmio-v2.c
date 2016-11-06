@@ -64,7 +64,7 @@ static void vgic_mmio_write_v2_misc(struct kvm_vcpu *vcpu,
 	}
 }
 
-static void vgic_mmio_write_sgir(struct kvm_vcpu *source_vcpu,
+void vgic_mmio_write_sgir(struct kvm_vcpu *source_vcpu,
 				 gpa_t addr, unsigned int len,
 				 unsigned long val)
 {

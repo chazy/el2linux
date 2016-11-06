@@ -19,6 +19,7 @@
 #include <asm/kvm_asm.h>
 #include <asm/kvm_hyp.h>
 #include <asm/debug-monitors.h>
+#include <asm/kvm_emulate.h>
 
 static bool __hyp_text __fpsimd_enabled_nvhe(void)
 {
@@ -254,7 +255,8 @@ static inline bool __is_debug_dirty(struct kvm_vcpu *vcpu)
 		(vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY);
 }
 
-static bool __hyp_text __populate_fault_info(struct kvm_vcpu *vcpu)
+static bool __hyp_text __populate_fault_info(struct kvm_vcpu *vcpu,
+					     unsigned long host_tpidr_el2)
 {
 	u64 esr = read_sysreg_el2(esr);
 	u8 ec = ESR_ELx_EC(esr);
@@ -288,7 +290,12 @@ static bool __hyp_text __populate_fault_info(struct kvm_vcpu *vcpu)
 
 	vcpu->arch.fault.far_el2 = far;
 	vcpu->arch.fault.hpfar_el2 = hpfar;
+
+#ifndef CONFIG_EL2_KERNEL
 	return true;
+#else
+	return __early_handle_mmio(vcpu, host_tpidr_el2);
+#endif
 }
 
 static int __hyp_text __guest_run(struct kvm_vcpu *vcpu)
@@ -332,7 +339,7 @@ again:
 	exit_code = __guest_enter(vcpu, host_ctxt);
 	/* And we're baaack! */
 
-	if (exit_code == ARM_EXCEPTION_TRAP && !__populate_fault_info(vcpu))
+	if (exit_code == ARM_EXCEPTION_TRAP && !__populate_fault_info(vcpu, host_tpidr_el2))
 		goto again;
 
 #ifdef CONFIG_EL2_KERNEL

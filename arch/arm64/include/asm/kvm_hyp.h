@@ -154,5 +154,9 @@ bool __fpsimd_enabled(void);
 u64 __guest_enter(struct kvm_vcpu *vcpu, struct kvm_cpu_context *host_ctxt);
 void __noreturn __hyp_do_panic(unsigned long, ...);
 
+void __early_sysreg_save_state(struct kvm_cpu_context *ctxt);
+void __early_sysreg_restore_state(struct kvm_cpu_context *ctxt);
+
+bool __early_handle_mmio(struct kvm_vcpu *vcpu, unsigned long host_tpidr_el2);
 #endif /* __ARM64_KVM_HYP_H__ */
 

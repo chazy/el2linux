@@ -325,4 +325,13 @@ int kvm_send_userspace_msi(struct kvm *kvm, struct kvm_msi *msi);
  */
 int kvm_vgic_setup_default_irq_routing(struct kvm *kvm);
 
+#ifdef CONFIG_EL2_KERNEL
+bool early_vgic_mmio_write_senable(struct kvm_vcpu *vcpu,
+			     gpa_t addr, unsigned int len,
+			     unsigned long val);
+void vgic_mmio_write_sgir(struct kvm_vcpu *source_vcpu,
+				 gpa_t addr, unsigned int len,
+				 unsigned long val);
+#endif
+
 #endif /* __KVM_ARM_VGIC_H */

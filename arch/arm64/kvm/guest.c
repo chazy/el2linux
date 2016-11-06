@@ -43,6 +43,7 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	VCPU_STAT(mmio_exit_user),
 	VCPU_STAT(mmio_exit_kernel),
 	VCPU_STAT(exits),
+	VCPU_STAT(vgic_early_exits),
 	{ NULL }
 };
 

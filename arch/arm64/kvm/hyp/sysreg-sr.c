@@ -415,3 +415,13 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = false;
 }
+
+void __hyp_text __early_sysreg_save_state(struct kvm_cpu_context *ctxt)
+{
+	ctxt->gp_regs.regs.sp = read_sysreg(sp_el0);
+}
+
+void __hyp_text __early_sysreg_restore_state(struct kvm_cpu_context *ctxt)
+{
+	write_sysreg(ctxt->gp_regs.regs.sp, sp_el0);
+}
