@@ -58,9 +58,13 @@ void __hyp_text __timer_save_state(struct kvm_vcpu *vcpu)
 	/* Disable the virtual timer */
 	write_sysreg_el0(0, cntv_ctl);
 
-#ifndef CONFIG_EL2_KERNEL
-	enable_phys_timer();
-#endif
+	/*
+	 * We don't need to do this for VHE since the host kernel runs in EL2
+	 * with HCR_EL2.TGE ==1, which makes those bits have no impact.
+	 */
+	if (!kvm_runs_in_hyp())
+		enable_phys_timer();
+
 	/* Clear cntvoff for the host */
 	write_sysreg(0, cntvoff_el2);
 }
@@ -70,9 +74,10 @@ void __hyp_text __timer_restore_state(struct kvm_vcpu *vcpu)
 	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
 	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
 
-#ifndef CONFIG_EL2_KERNEL
-	disable_phys_timer();
-#endif
+	/* Those bits are already configured at boot on VHE-system */
+
+	if (!kvm_runs_in_hyp())
+		disable_phys_timer();
 
 	if (timer->enabled) {
 		write_sysreg(kvm->arch.timer.cntvoff, cntvoff_el2);
