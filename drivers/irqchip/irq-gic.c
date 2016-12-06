@@ -1391,7 +1391,8 @@ int gic_of_init_child(struct device *dev, struct gic_chip_data **gic, int irq)
 	return 0;
 }
 
-static void __init gic_of_setup_kvm_info(struct device_node *node)
+static void __init gic_of_setup_kvm_info(struct device_node *node,
+					 bool supports_deactivate)
 {
 	int ret;
 	struct resource *vctrl_res = &gic_v2_kvm_info.vctrl;
@@ -1411,6 +1412,9 @@ static void __init gic_of_setup_kvm_info(struct device_node *node)
 	if (ret)
 		return;
 
+	if (!supports_deactivate)
+		return;
+
 	gic_set_kvm_info(&gic_v2_kvm_info);
 }
 
@@ -1419,6 +1423,7 @@ gic_of_init(struct device_node *node, struct device_node *parent)
 {
 	struct gic_chip_data *gic;
 	int irq, ret;
+	bool has_eoimode;
 
 	if (WARN_ON(!node))
 		return -ENODEV;
@@ -1436,7 +1441,8 @@ gic_of_init(struct device_node *node, struct device_node *parent)
 	 * Disable split EOI/Deactivate if either HYP is not available
 	 * or the CPU interface is too small.
 	 */
-	if (gic_cnt == 0 && !gic_check_eoimode(node, &gic->raw_cpu_base))
+	has_eoimode = gic_check_eoimode(node, &gic->raw_cpu_base);
+	if (gic_cnt == 0 && !has_eoimode)
 		static_key_slow_dec(&supports_deactivate);
 
 	ret = __gic_init_bases(gic, -1, &node->fwnode);
@@ -1447,7 +1453,7 @@ gic_of_init(struct device_node *node, struct device_node *parent)
 
 	if (!gic_cnt) {
 		gic_init_physaddr(node);
-		gic_of_setup_kvm_info(node);
+		gic_of_setup_kvm_info(node, has_eoimode);
 	}
 
 	if (parent) {
