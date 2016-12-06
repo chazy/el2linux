@@ -419,6 +419,31 @@ static int kvm_timer_dying_cpu(unsigned int cpu)
 	return 0;
 }
 
+static bool has_split_eoi_deactivate_support(void)
+{
+	struct irq_desc *desc;
+	struct irq_data *data;
+	struct irq_chip *chip;
+
+	/*
+	 * Check if split EOI and deactivate is supported on this machine.
+	 */
+	desc = irq_to_desc(host_vtimer_irq);
+	if (!desc) {
+		kvm_err("kvm_arch_timer: no host_vtimer_irq descriptor\n");
+		return false;
+	}
+
+	data = irq_desc_get_irq_data(desc);
+	chip = irq_data_get_irq_chip(data);
+	if (!chip || !chip->irq_set_vcpu_affinity) {
+		kvm_err("kvm_arch_timer: no split EOI/deactivate; abort\n");
+		return false;
+	}
+
+	return true;
+}
+
 int kvm_timer_hyp_init(void)
 {
 	struct arch_timer_kvm_info *info;
@@ -454,6 +479,11 @@ int kvm_timer_hyp_init(void)
 	if (!wqueue) {
 		err = -ENOMEM;
 		goto out_free;
+	}
+
+	if (!has_split_eoi_deactivate_support()) {
+		disable_percpu_irq(host_vtimer_irq);
+		return -ENODEV;
 	}
 
 	kvm_info("virtual timer IRQ%d\n", host_vtimer_irq);
