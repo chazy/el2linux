@@ -344,7 +344,7 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 	struct kvm_cpu_context *host_ctxt;
 	struct kvm_cpu_context *guest_ctxt;
 
-	if (!is_kernel_in_hyp_mode() || vcpu->arch.ctxt.sysregs_loaded_on_cpu)
+	if (!kvm_runs_in_hyp() || vcpu->arch.ctxt.sysregs_loaded_on_cpu)
 		return;
 
 	host_ctxt = vcpu->arch.host_cpu_context;
@@ -394,7 +394,7 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 		vcpu->arch.guest_vfp_loaded = 0;
 	}
 
-	if (!is_kernel_in_hyp_mode() || !vcpu->arch.ctxt.sysregs_loaded_on_cpu)
+	if (!kvm_runs_in_hyp() || !vcpu->arch.ctxt.sysregs_loaded_on_cpu)
 		return;
 
 	/* Save guest EL1 and user state */

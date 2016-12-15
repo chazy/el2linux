@@ -381,7 +381,7 @@ void vgic_v2_load(struct kvm_vcpu *vcpu)
 	struct vgic_dist *vgic = &vcpu->kvm->arch.vgic;
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 
-	if (!is_kernel_in_hyp_mode())
+	if (!kvm_runs_in_hyp())
 		return;
 
 	if (vgic_cpu->loaded)
@@ -398,7 +398,7 @@ void vgic_v2_put(struct kvm_vcpu *vcpu)
 	struct vgic_dist *vgic = &vcpu->kvm->arch.vgic;
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 
-	if (!is_kernel_in_hyp_mode())
+	if (!kvm_runs_in_hyp())
 		return;
 
 	if (!vgic_cpu->loaded)

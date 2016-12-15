@@ -388,7 +388,7 @@ static inline void __cpu_init_stage2(void)
 
 struct static_key;
 extern struct static_key_false kvm_is_in_hyp_mode;
-static inline bool kvm_runs_in_hyp_mode(void)
+static inline bool kvm_runs_in_hyp(void)
 {
 	return static_branch_unlikely(&kvm_is_in_hyp_mode);
 }

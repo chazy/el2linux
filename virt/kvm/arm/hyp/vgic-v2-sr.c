@@ -113,7 +113,7 @@ void __hyp_text __vgic_v2_save_state(struct kvm_vcpu *vcpu)
 	if (!base)
 		return;
 
-	if (!is_kernel_in_hyp_mode())
+	if (!kvm_runs_in_hyp())
 		cpu_if->vgic_vmcr = readl_relaxed(base + GICH_VMCR);
 
 	if (vcpu->arch.vgic_cpu.live_lrs) {
@@ -165,7 +165,7 @@ void __hyp_text __vgic_v2_restore_state(struct kvm_vcpu *vcpu)
 		}
 	}
 
-	if (!is_kernel_in_hyp_mode())
+	if (!kvm_runs_in_hyp())
 		writel_relaxed(cpu_if->vgic_vmcr, base + GICH_VMCR);
 	vcpu->arch.vgic_cpu.live_lrs = live_lrs;
 }
