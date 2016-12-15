@@ -68,6 +68,8 @@ static bool vgic_present;
 
 static DEFINE_PER_CPU(unsigned char, kvm_arm_hardware_enabled);
 
+__section(.hyp.text) DEFINE_STATIC_KEY_FALSE(kvm_is_in_hyp_mode);
+
 static void kvm_arm_set_running_vcpu(struct kvm_vcpu *vcpu)
 {
 	BUG_ON(preemptible());
@@ -1284,6 +1286,8 @@ static int init_vhe_mode(void)
 	/* set size of VMID supported by CPU */
 	kvm_vmid_bits = kvm_get_vmid_bits();
 	kvm_info("%d-bit VMID\n", kvm_vmid_bits);
+
+	static_branch_enable(&kvm_is_in_hyp_mode);
 
 	kvm_info("VHE mode initialized successfully\n");
 	return 0;

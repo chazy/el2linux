@@ -386,6 +386,13 @@ static inline void __cpu_init_stage2(void)
 		  "PARange is %d bits, unsupported configuration!", parange);
 }
 
+struct static_key;
+extern struct static_key_false kvm_is_in_hyp_mode;
+static inline bool kvm_runs_in_hyp_mode(void)
+{
+	return static_branch_unlikely(&kvm_is_in_hyp_mode);
+}
+
 void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu);
 void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu);
 #ifdef CONFIG_EL2_KERNEL
