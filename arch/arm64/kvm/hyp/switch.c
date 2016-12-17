@@ -303,12 +303,12 @@ static int __hyp_text __guest_run(struct kvm_vcpu *vcpu)
 	struct kvm_cpu_context *host_ctxt;
 	struct kvm_cpu_context *guest_ctxt;
 	u64 exit_code;
-
-#ifdef CONFIG_EL2_KERNEL
 	unsigned long host_tpidr_el2;
 
+#ifdef CONFIG_EL2_KERNEL
 	host_tpidr_el2 = read_sysreg(tpidr_el2);
 #endif
+
 	vcpu = kern_hyp_va(vcpu);
 	write_sysreg(vcpu, tpidr_el2);
 
