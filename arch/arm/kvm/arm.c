@@ -640,7 +640,10 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		guest_enter_irqoff();
 		vcpu->mode = IN_GUEST_MODE;
 
-		ret = kvm_call_hyp(__kvm_vcpu_run, vcpu);
+		if (kvm_runs_in_hyp())
+			ret = kvm_vcpu_run(vcpu);
+		else
+			ret = kvm_call_hyp(__kvm_vcpu_run, vcpu);
 
 		vcpu->mode = OUTSIDE_GUEST_MODE;
 		vcpu->stat.exits++;

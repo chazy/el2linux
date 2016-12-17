@@ -130,6 +130,8 @@ void __vgic_v3_restore_state(struct kvm_vcpu *vcpu);
 void __timer_enable_traps(struct kvm_vcpu *vcpu);
 void __timer_disable_traps(struct kvm_vcpu *vcpu);
 
+void __sysreg_save_common_state(struct kvm_cpu_context *ctxt);
+void __sysreg_restore_common_state(struct kvm_cpu_context *ctxt);
 void __sysreg_save_host_state(struct kvm_cpu_context *ctxt);
 void __sysreg_restore_host_state(struct kvm_cpu_context *ctxt);
 void __sysreg_save_guest_state(struct kvm_cpu_context *ctxt);

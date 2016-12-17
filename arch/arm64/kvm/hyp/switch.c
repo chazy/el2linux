@@ -298,6 +298,81 @@ static bool __hyp_text __populate_fault_info(struct kvm_vcpu *vcpu,
 #endif
 }
 
+int kvm_vcpu_run(struct kvm_vcpu *vcpu)
+{
+	struct kvm_cpu_context *host_ctxt;
+	struct kvm_cpu_context *guest_ctxt;
+	u64 exit_code;
+#ifdef CONFIG_EL2_KERNEL
+	unsigned long host_tpidr_el2;
+
+	/* TODO: Can we get rid of this? */
+	host_tpidr_el2 = read_sysreg(tpidr_el2);
+#endif
+	write_sysreg(vcpu, tpidr_el2);
+
+	host_ctxt = kern_hyp_va(vcpu->arch.host_cpu_context);
+	guest_ctxt = &vcpu->arch.ctxt;
+
+	/* TODO: Move timer restore to timer code - only look at the timer once */
+	/* TODO: Move vgic restore to vgic code - only look at the vgic once */
+	__vgic_restore_state(vcpu);
+	__timer_enable_traps(vcpu);
+
+	__sysreg_save_common_state(host_ctxt);
+
+	__activate_traps(vcpu);
+	__activate_vm(vcpu);
+
+	/*
+	 * We must restore the 32-bit state before the sysregs, thanks
+	 * to erratum #852523 (Cortex-A57) or #853709 (Cortex-A72).
+	 */
+	__sysreg32_restore_state(vcpu);
+	__sysreg_restore_guest_state(guest_ctxt);
+
+	/* TODO: Move debug logic to debug code - only look at the debug state once*/
+	if (__is_debug_dirty(vcpu)) {
+		__debug_cond_save_host_state(vcpu);
+		__debug_restore_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
+	}
+
+
+	/* Jump in the fire! */
+again:
+	exit_code = __guest_enter(vcpu, host_ctxt);
+	/* And we're baaack! */
+
+	if (exit_code == ARM_EXCEPTION_TRAP && !__populate_fault_info(vcpu, host_tpidr_el2))
+		goto again;
+
+#ifdef CONFIG_EL2_KERNEL
+	write_sysreg(host_tpidr_el2, tpidr_el2);
+#endif
+
+	__sysreg_save_guest_state(guest_ctxt);
+	__sysreg32_save_state(vcpu);
+	/* TODO: Move timer restore to timer code - only look at the timer once */
+	/* TODO: Move vgic restore to vgic code - only look at the vgic once */
+	__timer_disable_traps(vcpu);
+	__vgic_save_state(vcpu);
+
+	__deactivate_traps(vcpu);
+#ifndef CONFIG_EL2_KERNEL
+	__deactivate_vm(vcpu);
+#endif
+
+	__sysreg_restore_common_state(host_ctxt);
+
+	/* TODO: Move debug logic to debug code - only look at the debug state once*/
+	if (__is_debug_dirty(vcpu)) {
+		__debug_save_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
+		__debug_cond_restore_host_state(vcpu);
+	}
+
+	return exit_code;
+}
+
 static int __hyp_text __guest_run(struct kvm_vcpu *vcpu)
 {
 	struct kvm_cpu_context *host_ctxt;
