@@ -36,7 +36,7 @@ static void __hyp_text __sysreg_do_nothing(struct kvm_cpu_context *ctxt) { }
  * kvm_arch_vcpu_load/put}.
  */
 
-static void __hyp_text __sysreg_save_common_state(struct kvm_cpu_context *ctxt)
+void __hyp_text __sysreg_save_common_state(struct kvm_cpu_context *ctxt)
 {
 	if (!has_vhe()) {
 		ctxt->sys_regs[TPIDR_EL1]	= read_sysreg(tpidr_el1);
@@ -111,7 +111,7 @@ void __hyp_text __sysreg_save_guest_state(struct kvm_cpu_context *ctxt)
 	__sysreg_save_el2_return_state(ctxt);
 }
 
-static void __hyp_text __sysreg_restore_common_state(struct kvm_cpu_context *ctxt)
+void __hyp_text __sysreg_restore_common_state(struct kvm_cpu_context *ctxt)
 {
 	if (!has_vhe()) {
 		write_sysreg(ctxt->sys_regs[TPIDR_EL1],	  tpidr_el1);
