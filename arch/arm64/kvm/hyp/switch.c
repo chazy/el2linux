@@ -303,16 +303,16 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	struct kvm_cpu_context *host_ctxt;
 	struct kvm_cpu_context *guest_ctxt;
 	u64 exit_code;
-#ifdef CONFIG_EL2_KERNEL
-	unsigned long host_tpidr_el2;
-
-	/* TODO: Can we get rid of this? */
-	host_tpidr_el2 = read_sysreg(tpidr_el2);
-#endif
-	write_sysreg(vcpu, tpidr_el2);
 
 	host_ctxt = kern_hyp_va(vcpu->arch.host_cpu_context);
 	guest_ctxt = &vcpu->arch.ctxt;
+
+#ifdef CONFIG_EL2_KERNEL
+	/* TODO: Can we get rid of this? */
+	host_ctxt->host_tpidr = read_sysreg(tpidr_el2);
+#endif
+	write_sysreg(vcpu, tpidr_el2);
+
 
 	/* TODO: Move timer restore to timer code - only look at the timer once */
 	/* TODO: Move vgic restore to vgic code - only look at the vgic once */
@@ -343,12 +343,10 @@ again:
 	exit_code = __guest_enter(vcpu, host_ctxt);
 	/* And we're baaack! */
 
-	if (exit_code == ARM_EXCEPTION_TRAP && !__populate_fault_info(vcpu, host_tpidr_el2))
+	if (exit_code == ARM_EXCEPTION_TRAP &&
+	    !__populate_fault_info(vcpu, host_ctxt->host_tpidr))
 		goto again;
 
-#ifdef CONFIG_EL2_KERNEL
-	write_sysreg(host_tpidr_el2, tpidr_el2);
-#endif
 
 	__sysreg_save_guest_state(guest_ctxt);
 	__sysreg32_save_state(vcpu);
@@ -369,6 +367,10 @@ again:
 		__debug_save_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
 		__debug_cond_restore_host_state(vcpu);
 	}
+
+#ifdef CONFIG_EL2_KERNEL
+	write_sysreg(host_ctxt->host_tpidr, tpidr_el2);
+#endif
 
 	return exit_code;
 }
@@ -474,7 +476,7 @@ static void __hyp_text __hyp_call_panic_vhe(u64 spsr, u64 elr, u64 par)
 
 static hyp_alternate_select(__hyp_call_panic,
 			    __hyp_call_panic_nvhe, __hyp_call_panic_vhe,
-			    ARM64_HAS_VIRT_HOST_EXTN);
+			    ARM64_RUNS_AT_EL2);
 
 void __hyp_text __noreturn __hyp_panic(void)
 {
@@ -488,6 +490,9 @@ void __hyp_text __noreturn __hyp_panic(void)
 
 		vcpu = (struct kvm_vcpu *)read_sysreg(tpidr_el2);
 		host_ctxt = kern_hyp_va(vcpu->arch.host_cpu_context);
+#ifdef CONFIG_EL2_KERNEL
+		write_sysreg(host_ctxt->host_tpidr, tpidr_el2);
+#endif
 		__deactivate_traps(vcpu);
 		__deactivate_vm(vcpu);
 		__sysreg_restore_host_state(host_ctxt);

@@ -197,6 +197,8 @@ struct kvm_cpu_context {
 	 * under VHE kernels.
 	 */
 	bool sysregs_loaded_on_cpu;
+
+	u64 host_tpidr;
 };
 
 typedef struct kvm_cpu_context kvm_cpu_context_t;
