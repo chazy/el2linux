@@ -144,6 +144,9 @@ unsigned long *vcpu_reg32(const struct kvm_vcpu *vcpu, u8 reg_num)
 unsigned long *vcpu_spsr32(const struct kvm_vcpu *vcpu)
 {
 	unsigned long mode = *vcpu_cpsr(vcpu) & COMPAT_PSR_MODE_MASK;
+
+	BUG_ON(vcpu->arch.ctxt.sysregs_loaded_on_cpu);
+
 	switch (mode) {
 	case COMPAT_PSR_MODE_SVC:
 		mode = KVM_SPSR_SVC;
