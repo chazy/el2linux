@@ -391,11 +391,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	 */
 	__sysreg32_restore_state(vcpu);
 	sysreg_restore_common_state_vhe(guest_ctxt);
-	if (__is_debug_dirty(vcpu)) {
-		__debug_cond_save_host_state(vcpu);
-		__debug_restore_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr),
-				      guest_ctxt);
-	}
 
 	/* Jump in the fire! */
 again:
@@ -413,17 +408,6 @@ again:
 	__deactivate_traps(vcpu);
 
 	sysreg_restore_common_state_vhe(host_ctxt);
-
-	if (__is_debug_dirty(vcpu)) {
-		__debug_save_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr),
-				   guest_ctxt);
-		/*
-		 * This must come after restoring the host sysregs, since a
-		 * non-VHE system may enable SPE here and make use of the
-		 * TTBRs.
-		 */
-		__debug_cond_restore_host_state(vcpu);
-	}
 
 	return exit_code;
 }

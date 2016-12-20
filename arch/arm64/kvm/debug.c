@@ -24,6 +24,7 @@
 #include <asm/kvm_asm.h>
 #include <asm/kvm_arm.h>
 #include <asm/kvm_emulate.h>
+#include <asm/kvm_hyp.h>
 
 #include "trace.h"
 
@@ -195,9 +196,6 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu)
 		}
 	}
 
-	BUG_ON(!vcpu->guest_debug &&
-		vcpu->arch.debug_ptr != &vcpu->arch.vcpu_debug_state);
-
 	/* Trap debug register access */
 	if (trap_debug)
 		vcpu->arch.mdcr_el2 |= MDCR_EL2_TDA;
@@ -205,11 +203,38 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu)
 	trace_kvm_arm_set_dreg32("MDCR_EL2", vcpu->arch.mdcr_el2);
 	trace_kvm_arm_set_dreg32("MDSCR_EL1",
 				 vcpu_get_sys_reg(vcpu, MDSCR_EL1));
+
+	if (!has_vhe())
+		return;
+
+	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY) {
+		__debug_save_state(vcpu, &vcpu->arch.host_debug_state.regs,
+				   vcpu->arch.host_cpu_context);
+		__debug_restore_state(vcpu, vcpu->arch.debug_ptr,
+				      &vcpu->arch.ctxt);
+	}
 }
 
 void kvm_arm_clear_debug(struct kvm_vcpu *vcpu)
 {
 	trace_kvm_arm_clear_debug(vcpu->guest_debug);
+
+	if (has_vhe() &&
+	    (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)) {
+		__debug_save_state(vcpu, vcpu->arch.debug_ptr,
+				   &vcpu->arch.ctxt);
+		__debug_restore_state(vcpu, &vcpu->arch.host_debug_state.regs,
+				      vcpu->arch.host_cpu_context);
+
+		/*
+		 * If the guest is using the debug registers then we must
+		 * switch the guest regs back next time since we need them in
+		 * use, so we leave the dirty flag on.
+		 */
+		if (!(vcpu->arch.ctxt.sys_regs[MDSCR_EL1] & DBG_MDSCR_KDE) &&
+		    !(vcpu->arch.ctxt.sys_regs[MDSCR_EL1] & DBG_MDSCR_MDE))
+			vcpu->arch.debug_flags &= ~KVM_ARM64_DEBUG_DIRTY;
+	}
 
 	if (vcpu->guest_debug) {
 		restore_guest_debug_regs(vcpu);

@@ -190,9 +190,6 @@ static void __hyp_text __sysreg32_save_cp_state(struct kvm_vcpu *vcpu)
 
 	sysreg[DACR32_EL2] = read_sysreg(dacr32_el2);
 	sysreg[IFSR32_EL2] = read_sysreg(ifsr32_el2);
-
-	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)
-		sysreg[DBGVCR32_EL2] = read_sysreg(dbgvcr32_el2);
 }
 
 static void __hyp_text __sysreg32_do_nothing(struct kvm_vcpu *vcpu) { }
@@ -224,9 +221,6 @@ static void __hyp_text __sysreg32_restore_cp_state(struct kvm_vcpu *vcpu)
 
 	write_sysreg(sysreg[DACR32_EL2], dacr32_el2);
 	write_sysreg(sysreg[IFSR32_EL2], ifsr32_el2);
-
-	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)
-		write_sysreg(sysreg[DBGVCR32_EL2], dbgvcr32_el2);
 }
 
 static hyp_alternate_select(__sysreg32_call_restore_cp_state,
