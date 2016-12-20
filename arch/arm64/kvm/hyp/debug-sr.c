@@ -72,9 +72,6 @@ void __hyp_text __debug_save_state(struct kvm_vcpu *vcpu,
 	u64 aa64dfr0;
 	int brps, wrps;
 
-	if (!(vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY))
-		return;
-
 	aa64dfr0 = read_sysreg(id_aa64dfr0_el1);
 	brps = (aa64dfr0 >> 12) & 0xf;
 	wrps = (aa64dfr0 >> 20) & 0xf;
@@ -85,6 +82,9 @@ void __hyp_text __debug_save_state(struct kvm_vcpu *vcpu,
 	save_debug(dbg->dbg_wvr, dbgwvr, wrps);
 
 	ctxt->sys_regs[MDCCINT_EL1] = read_sysreg(mdccint_el1);
+
+	if (read_sysreg(hcr_el2) & HCR_RW)
+		ctxt->sys_regs[DBGVCR32_EL2] = read_sysreg(dbgvcr32_el2);
 }
 
 void __hyp_text __debug_restore_state(struct kvm_vcpu *vcpu,
@@ -93,9 +93,6 @@ void __hyp_text __debug_restore_state(struct kvm_vcpu *vcpu,
 {
 	u64 aa64dfr0;
 	int brps, wrps;
-
-	if (!(vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY))
-		return;
 
 	aa64dfr0 = read_sysreg(id_aa64dfr0_el1);
 
@@ -108,6 +105,10 @@ void __hyp_text __debug_restore_state(struct kvm_vcpu *vcpu,
 	restore_debug(dbg->dbg_wvr, dbgwvr, wrps);
 
 	write_sysreg(ctxt->sys_regs[MDCCINT_EL1], mdccint_el1);
+
+	if (read_sysreg(hcr_el2) & HCR_RW)
+		write_sysreg(ctxt->sys_regs[DBGVCR32_EL2], dbgvcr32_el2);
+
 }
 
 void __hyp_text __debug_cond_save_host_state(struct kvm_vcpu *vcpu)
