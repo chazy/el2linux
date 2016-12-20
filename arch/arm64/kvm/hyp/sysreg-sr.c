@@ -194,22 +194,9 @@ void __hyp_text __fpsimd32_save_state(struct kvm_cpu_context *ctxt)
 	ctxt->sys_regs[FPEXC32_EL2] = read_sysreg(fpexc32_el2);
 }
 
-static void __hyp_text __sysreg32_save_cp_state(struct kvm_vcpu *vcpu)
-{
-	u64 *sysreg = vcpu->arch.ctxt.sys_regs;
-
-	sysreg[DACR32_EL2] = read_sysreg(dacr32_el2);
-	sysreg[IFSR32_EL2] = read_sysreg(ifsr32_el2);
-}
-
-static void __hyp_text __sysreg32_do_nothing(struct kvm_vcpu *vcpu) { }
-
-static hyp_alternate_select(__sysreg32_call_save_cp_state,
-			    __sysreg32_save_cp_state, __sysreg32_do_nothing,
-			    ARM64_RUNS_AT_EL2);
-
 void __hyp_text __sysreg32_save_state(struct kvm_vcpu *vcpu)
 {
+	u64 *sysreg = vcpu->arch.ctxt.sys_regs;
 	u64 *spsr;
 
 	if (read_sysreg(hcr_el2) & HCR_RW)
@@ -222,23 +209,13 @@ void __hyp_text __sysreg32_save_state(struct kvm_vcpu *vcpu)
 	spsr[KVM_SPSR_IRQ] = read_sysreg(spsr_irq);
 	spsr[KVM_SPSR_FIQ] = read_sysreg(spsr_fiq);
 
-	__sysreg32_call_save_cp_state()(vcpu);
+	sysreg[DACR32_EL2] = read_sysreg(dacr32_el2);
+	sysreg[IFSR32_EL2] = read_sysreg(ifsr32_el2);
 }
-
-static void __hyp_text __sysreg32_restore_cp_state(struct kvm_vcpu *vcpu)
-{
-	u64 *sysreg = vcpu->arch.ctxt.sys_regs;
-
-	write_sysreg(sysreg[DACR32_EL2], dacr32_el2);
-	write_sysreg(sysreg[IFSR32_EL2], ifsr32_el2);
-}
-
-static hyp_alternate_select(__sysreg32_call_restore_cp_state,
-			    __sysreg32_restore_cp_state, __sysreg32_do_nothing,
-			    ARM64_RUNS_AT_EL2);
 
 void __hyp_text __sysreg32_restore_state(struct kvm_vcpu *vcpu)
 {
+	u64 *sysreg = vcpu->arch.ctxt.sys_regs;
 	u64 *spsr;
 
 	if (read_sysreg(hcr_el2) & HCR_RW)
@@ -251,7 +228,8 @@ void __hyp_text __sysreg32_restore_state(struct kvm_vcpu *vcpu)
 	write_sysreg(spsr[KVM_SPSR_IRQ], spsr_irq);
 	write_sysreg(spsr[KVM_SPSR_FIQ], spsr_fiq);
 
-	__sysreg32_call_restore_cp_state()(vcpu);
+	write_sysreg(sysreg[DACR32_EL2], dacr32_el2);
+	write_sysreg(sysreg[IFSR32_EL2], ifsr32_el2);
 }
 
 unsigned long __read_sysreg_from_cpu(enum vcpu_sysreg num)
@@ -355,11 +333,14 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 	__sysreg_save_el1_state(host_ctxt);
 #endif
 
-	/* Load guest EL1 and user state */
+	/*
+	 * Load guest EL1 and user state
+	 *
+	 * We must restore the 32-bit state before the sysregs, thanks
+	 * to erratum #852523 (Cortex-A57) or #853709 (Cortex-A72).
+	 */
+	__sysreg32_restore_state(vcpu);
 	__sysreg_restore_el1_state(guest_ctxt);
-	if (!(vcpu->arch.hcr_el2 & HCR_RW))
-		__sysreg32_restore_cp_state(vcpu);
-
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = true;
 }
 
@@ -393,8 +374,7 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 
 	/* Save guest EL1 and user state */
 	__sysreg_save_el1_state(guest_ctxt);
-	if (!(read_sysreg(hcr_el2) & HCR_RW))
-		__sysreg32_save_cp_state(vcpu);
+	__sysreg32_save_state(vcpu);
 
 	/* Restore host user state */
 #ifndef CONFIG_EL2_KERNEL
