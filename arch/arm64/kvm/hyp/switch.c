@@ -385,11 +385,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	__vgic_restore_state(vcpu);
 	__timer_enable_traps(vcpu);
 
-	/*
-	 * We must restore the 32-bit state before the sysregs, thanks
-	 * to erratum #852523 (Cortex-A57) or #853709 (Cortex-A72).
-	 */
-	__sysreg32_restore_state(vcpu);
 	sysreg_restore_common_state_vhe(guest_ctxt);
 
 	/* Jump in the fire! */
@@ -401,7 +396,6 @@ again:
 		goto again;
 
 	sysreg_save_common_state_vhe(guest_ctxt);
-	__sysreg32_save_state(vcpu);
 	__timer_disable_traps(vcpu);
 	__vgic_save_state(vcpu);
 
