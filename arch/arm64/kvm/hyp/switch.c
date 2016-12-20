@@ -402,12 +402,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	__sysreg32_restore_state(vcpu);
 	__sysreg_restore_guest_state(guest_ctxt);
 
-	/* TODO: Move debug logic to debug code - only look at the debug state once*/
-	if (__is_debug_dirty(vcpu)) {
-		__debug_cond_save_host_state(vcpu);
-		__debug_restore_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr), guest_ctxt);
-	}
-
 
 	/* Jump in the fire! */
 again:
@@ -427,14 +421,6 @@ again:
 	__deactivate_traps(vcpu);
 
 	__sysreg_restore_common_state(host_ctxt);
-
-	/* TODO: Move debug logic to debug code - only look at the debug state
-	 * once*/
-	if (__is_debug_dirty(vcpu)) {
-		__debug_save_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr),
-				   guest_ctxt);
-		__debug_cond_restore_host_state(vcpu);
-	}
 
 	return exit_code;
 }
