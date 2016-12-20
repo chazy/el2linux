@@ -122,6 +122,8 @@ static inline unsigned long *vcpu_spsr(const struct kvm_vcpu *vcpu)
 	if (vcpu_mode_is_32bit(vcpu))
 		return vcpu_spsr32(vcpu);
 
+	BUG_ON(vcpu->arch.ctxt.sysregs_loaded_on_cpu);
+
 	return (unsigned long *)&vcpu_gp_regs(vcpu)->spsr[KVM_SPSR_EL1];
 }
 
