@@ -250,7 +250,6 @@ struct vgic_cpu {
 	 */
 	struct list_head ap_list_head;
 
-	u64 live_lrs;
 	bool		loaded;
 
 	/*

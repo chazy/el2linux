@@ -676,7 +676,6 @@ static inline void vgic_save_state(struct kvm_vcpu *vcpu)
 void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
-	int lr;
 
 	if (kvm_runs_in_hyp())
 		vgic_save_state(vcpu);
@@ -685,9 +684,6 @@ void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	vgic_fold_lr_state(vcpu);
 	vgic_prune_ap_list(vcpu);
 
-	/* Make sure we can fast-path in flush_hwstate */
-	for (lr = 0; lr < vgic_cpu->used_lrs; lr++)
-		vgic_clear_lr(vcpu, lr);
 	vgic_cpu->used_lrs = 0;
 }
 
