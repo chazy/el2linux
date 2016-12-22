@@ -323,9 +323,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	/* make sure we're using the latest VMID for this VM */
 	write_sysreg(vcpu->kvm->arch.vttbr, vttbr_el2);
 
-	/* TODO: Move timer restore to timer code - only look at the timer once */
-	__timer_enable_traps(vcpu);
-
 	__sysreg_save_common_state(host_ctxt);
 
 	set_kvm_vbar();
@@ -343,9 +340,6 @@ again:
 
 
 	__sysreg_save_guest_state(guest_ctxt);
-
-	/* TODO: Move timer restore to timer code - only look at the timer once */
-	__timer_disable_traps(vcpu);
 
 	restore_host_vbar();
 
