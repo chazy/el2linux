@@ -104,12 +104,17 @@ static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
 	write_sysreg(__kvm_hyp_vector, vbar_el1);
 }
 
+static inline void __hyp_text set_kvm_vbar(void)
+{
+	write_sysreg(__kvm_hyp_vector, vbar_el2);
+}
+
 static void __hyp_text __activate_traps_nvhe(struct kvm_vcpu *vcpu)
 {
 #ifndef CONFIG_EL2_KERNEL
 	__activate_fpsimd_nvhe(vcpu);
 #else
-	write_sysreg(__kvm_hyp_vector, vbar_el2);
+	set_kvm_vbar();
 #endif
 }
 
@@ -134,14 +139,16 @@ static void __hyp_text __deactivate_traps_vhe(void)
 	write_sysreg(vectors, vbar_el1);
 }
 
-static void __hyp_text __deactivate_traps_nvhe(void)
+static inline void __hyp_text restore_host_vbar(void)
 {
-#ifdef CONFIG_EL2_KERNEL
 	extern char vectors[];	/* kernel exception vectors */
 
 	write_sysreg(vectors, vbar_el2);
-#else
+}
 
+static void __hyp_text __deactivate_traps_nvhe(void)
+{
+#ifndef CONFIG_EL2_KERNEL
 	write_sysreg(EL2_HOST_HCR, hcr_el2);
 	__deactivate_fpsimd_nvhe();
 #endif
@@ -321,7 +328,7 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 
 	__sysreg_save_common_state(host_ctxt);
 
-	__activate_traps(vcpu);
+	set_kvm_vbar();
 
 	__sysreg_restore_guest_state(guest_ctxt);
 
@@ -340,7 +347,7 @@ again:
 	/* TODO: Move timer restore to timer code - only look at the timer once */
 	__timer_disable_traps(vcpu);
 
-	__deactivate_traps(vcpu);
+	restore_host_vbar();
 
 	__sysreg_restore_common_state(host_ctxt);
 
