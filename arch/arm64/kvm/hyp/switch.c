@@ -374,14 +374,18 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	/* make sure we're using the latest VMID for this VM */
 	write_sysreg(kvm->arch.vttbr, vttbr_el2);
 
-	/* TODO: Move timer restore to timer code - only look at the timer once */
-	__timer_enable_traps(vcpu);
+	/* switch sp_el0 */
+	host_ctxt->gp_regs.regs.sp = read_sysreg(sp_el0);
+	write_sysreg(guest_ctxt->gp_regs.regs.sp, sp_el0);
 
-	__sysreg_save_common_state(host_ctxt);
+	/* restore guest return state */
+	write_sysreg_el2(guest_ctxt->gp_regs.regs.pc,     elr);
+	write_sysreg_el2(guest_ctxt->gp_regs.regs.pstate, spsr);
 
 	__activate_traps_vhe(vcpu);
 
-	__sysreg_restore_guest_state(guest_ctxt);
+	/* set the vector to KVM's vector */
+	write_sysreg(__kvm_hyp_vector, vbar_el2);
 
 	/* Jump in the fire! */
 again:
@@ -391,14 +395,15 @@ again:
 	if (fixup_guest_exit(vcpu, &exit_code))
 		goto again;
 
-	__sysreg_save_guest_state(guest_ctxt);
+	/* switch sp_el0 */
+	guest_ctxt->gp_regs.regs.sp = read_sysreg(sp_el0);
+	write_sysreg(host_ctxt->gp_regs.regs.sp, sp_el0);
 
-	/* TODO: Move timer restore to timer code - only look at the timer once */
-	__timer_disable_traps(vcpu);
+	/* save guest return state */
+	guest_ctxt->gp_regs.regs.pc	= read_sysreg_el2(elr);
+	guest_ctxt->gp_regs.regs.pstate	= read_sysreg_el2(spsr);
 
 	__deactivate_traps_vhe(vcpu);
-
-	__sysreg_restore_common_state(host_ctxt);
 
 	return exit_code;
 }
