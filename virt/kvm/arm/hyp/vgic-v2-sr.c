@@ -66,9 +66,6 @@ void __hyp_text __vgic_v2_save_state(struct kvm_vcpu *vcpu)
 	void __iomem *base = kern_hyp_va(vgic->vctrl_base);
 	u64 used_lrs = vcpu->arch.vgic_cpu.used_lrs;
 
-	if (!base)
-		return;
-
 	if (used_lrs) {
 		cpu_if->vgic_apr = readl_relaxed(base + GICH_APR);
 
@@ -82,8 +79,41 @@ void __hyp_text __vgic_v2_save_state(struct kvm_vcpu *vcpu)
 	}
 }
 
+void __hyp_text vgic_v2_save_state(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	struct vgic_dist *vgic = &kvm->arch.vgic;
+	void __iomem *base = kern_hyp_va(vgic->vctrl_base);
+
+	if (!base)
+		return;
+
+	__vgic_v2_save_state(vcpu);
+}
+
 /* vcpu is already in the HYP VA space */
 void __hyp_text __vgic_v2_restore_state(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	struct vgic_dist *vgic = &kvm->arch.vgic;
+	void __iomem *base = kern_hyp_va(vgic->vctrl_base);
+	int i;
+	u64 used_lrs = vcpu->arch.vgic_cpu.used_lrs;
+
+	if (used_lrs) {
+		writel_relaxed(cpu_if->vgic_hcr, base + GICH_HCR);
+		writel_relaxed(cpu_if->vgic_apr, base + GICH_APR);
+		for (i = 0; i < used_lrs; i++) {
+			writel_relaxed(cpu_if->vgic_lr[i],
+				       base + GICH_LR0 + (i * 4));
+		}
+	}
+}
+
+/* vcpu is already in the HYP VA space */
+void __hyp_text vgic_v2_restore_state(struct kvm_vcpu *vcpu)
 {
 	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
 	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
@@ -95,14 +125,7 @@ void __hyp_text __vgic_v2_restore_state(struct kvm_vcpu *vcpu)
 	if (!base)
 		return;
 
-	if (used_lrs) {
-		writel_relaxed(cpu_if->vgic_hcr, base + GICH_HCR);
-		writel_relaxed(cpu_if->vgic_apr, base + GICH_APR);
-		for (i = 0; i < used_lrs; i++) {
-			writel_relaxed(cpu_if->vgic_lr[i],
-				       base + GICH_LR0 + (i * 4));
-		}
-	}
+	__vgic_v2_restore_state(vcpu);
 }
 
 #ifdef CONFIG_ARM64
