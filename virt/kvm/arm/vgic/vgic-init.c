@@ -381,6 +381,14 @@ static irqreturn_t vgic_v2_maintenance_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+void kvm_vgic_init_lrs(void)
+{
+	if (kvm_vgic_global_state.type == VGIC_V2)
+		vgic_v2_init_lrs();
+	else
+		__vgic_v3_init_lrs();
+}
+
 /**
  * kvm_vgic_hyp_init: populates the kvm_vgic_global_state variable
  * according to the host GIC model. Accordingly calls either
