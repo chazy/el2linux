@@ -676,6 +676,10 @@ static inline void vgic_save_state(struct kvm_vcpu *vcpu)
 void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	u64 used_lrs = vcpu->arch.vgic_cpu.used_lrs;
+
+	if (!used_lrs)
+		return;
 
 	if (kvm_runs_in_hyp())
 		vgic_save_state(vcpu);
