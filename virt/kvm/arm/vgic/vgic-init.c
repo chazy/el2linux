@@ -425,14 +425,16 @@ static int vgic_init_cpu_dying(unsigned int cpu)
 	return 0;
 }
 
-static irqreturn_t vgic_maintenance_handler(int irq, void *data)
+static irqreturn_t vgic_v3_maintenance_handler(int irq, void *data)
 {
-	/*
-	 * We cannot rely on the vgic maintenance interrupt to be
-	 * delivered synchronously. This means we can only use it to
-	 * exit the VM, and we perform the handling of EOIed
-	 * interrupts on the exit path (see vgic_process_maintenance).
-	 */
+	BUG(); /* Not implemented lazy save/restore on GICv3 */
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t vgic_v2_maintenance_handler(int irq, void *data)
+{
+	struct kvm_vcpu *vcpu = (struct kvm_vcpu *)data;
+	vgic_v2_handle_maintenance(vcpu);
 	return IRQ_HANDLED;
 }
 
@@ -464,6 +466,7 @@ void kvm_vgic_init_cpu_hardware(void)
 int kvm_vgic_hyp_init(void)
 {
 	const struct gic_kvm_info *gic_kvm_info;
+	irqreturn_t (*handler)(int irq, void *data);
 	int ret;
 
 	gic_kvm_info = gic_get_kvm_info();
@@ -478,6 +481,7 @@ int kvm_vgic_hyp_init(void)
 	switch (gic_kvm_info->type) {
 	case GIC_V2:
 		ret = vgic_v2_probe(gic_kvm_info);
+		handler = vgic_v2_maintenance_handler;
 		break;
 	case GIC_V3:
 		ret = vgic_v3_probe(gic_kvm_info);
@@ -485,6 +489,7 @@ int kvm_vgic_hyp_init(void)
 			static_branch_enable(&kvm_vgic_global_state.gicv3_cpuif);
 			kvm_info("GIC system register CPU interface enabled\n");
 		}
+		handler = vgic_v3_maintenance_handler;
 		break;
 	default:
 		ret = -ENODEV;
@@ -494,8 +499,7 @@ int kvm_vgic_hyp_init(void)
 		return ret;
 
 	kvm_vgic_global_state.maint_irq = gic_kvm_info->maint_irq;
-	ret = request_percpu_irq(kvm_vgic_global_state.maint_irq,
-				 vgic_maintenance_handler,
+	ret = request_percpu_irq(kvm_vgic_global_state.maint_irq, handler,
 				 "vgic", kvm_get_running_vcpus());
 	if (ret) {
 		kvm_err("Cannot register interrupt %d\n",
