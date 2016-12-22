@@ -66,6 +66,7 @@ int vgic_register_dist_iodev(struct kvm *kvm, gpa_t dist_base_address,
 			     enum vgic_type);
 void vgic_v2_load(struct kvm_vcpu *vcpu);
 void vgic_v2_put(struct kvm_vcpu *vcpu);
+void vgic_v2_handle_maintenance(struct kvm_vcpu *vcpu);
 
 bool vgic_v2_irq_is_active_in_lr(struct kvm_vcpu *vcpu, int intid,
 				 bool *act, bool *pend);
