@@ -387,8 +387,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	guest_ctxt = &vcpu->arch.ctxt;
 
 	/* TODO: Move timer restore to timer code - only look at the timer once */
-	/* TODO: Move vgic restore to vgic code - only look at the vgic once */
-	__vgic_restore_state(vcpu);
 	__timer_enable_traps(vcpu);
 
 	__sysreg_save_common_state(host_ctxt);
@@ -408,9 +406,7 @@ again:
 	__sysreg_save_guest_state(guest_ctxt);
 
 	/* TODO: Move timer restore to timer code - only look at the timer once */
-	/* TODO: Move vgic restore to vgic code - only look at the vgic once */
 	__timer_disable_traps(vcpu);
-	__vgic_save_state(vcpu);
 
 	__deactivate_traps(vcpu);
 
