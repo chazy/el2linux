@@ -171,11 +171,11 @@ static void __hyp_text __deactivate_vm(struct kvm_vcpu *vcpu)
 }
 
 static hyp_alternate_select(__vgic_call_save_state,
-			    __vgic_v2_save_state, __vgic_v3_save_state,
+			    vgic_v2_save_state, __vgic_v3_save_state,
 			    ARM64_HAS_SYSREG_GIC_CPUIF);
 
 static hyp_alternate_select(__vgic_call_restore_state,
-			    __vgic_v2_restore_state, __vgic_v3_restore_state,
+			    vgic_v2_restore_state, __vgic_v3_restore_state,
 			    ARM64_HAS_SYSREG_GIC_CPUIF);
 
 static void __hyp_text __vgic_save_state(struct kvm_vcpu *vcpu)

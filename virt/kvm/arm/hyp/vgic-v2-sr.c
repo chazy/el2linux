@@ -110,12 +110,6 @@ void __hyp_text __vgic_v2_save_state(struct kvm_vcpu *vcpu)
 	struct vgic_dist *vgic = &kvm->arch.vgic;
 	void __iomem *base = kern_hyp_va(vgic->vctrl_base);
 
-	if (!base)
-		return;
-
-	if (!kvm_runs_in_hyp())
-		cpu_if->vgic_vmcr = readl_relaxed(base + GICH_VMCR);
-
 	if (vcpu->arch.vgic_cpu.live_lrs) {
 		cpu_if->vgic_apr = readl_relaxed(base + GICH_APR);
 
@@ -134,6 +128,22 @@ void __hyp_text __vgic_v2_save_state(struct kvm_vcpu *vcpu)
 	}
 }
 
+void __hyp_text vgic_v2_save_state(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	struct vgic_dist *vgic = &kvm->arch.vgic;
+	void __iomem *base = kern_hyp_va(vgic->vctrl_base);
+
+	if (!base)
+		return;
+
+	if (!kvm_runs_in_hyp())
+		cpu_if->vgic_vmcr = readl_relaxed(base + GICH_VMCR);
+
+	__vgic_v2_save_state(vcpu);
+}
+
 /* vcpu is already in the HYP VA space */
 void __hyp_text __vgic_v2_restore_state(struct kvm_vcpu *vcpu)
 {
@@ -144,10 +154,6 @@ void __hyp_text __vgic_v2_restore_state(struct kvm_vcpu *vcpu)
 	int nr_lr = (kern_hyp_va(&kvm_vgic_global_state))->nr_lr;
 	int i;
 	u64 live_lrs = 0;
-
-	if (!base)
-		return;
-
 
 	for (i = 0; i < nr_lr; i++)
 		if (cpu_if->vgic_lr[i] & GICH_LR_STATE)
@@ -165,7 +171,21 @@ void __hyp_text __vgic_v2_restore_state(struct kvm_vcpu *vcpu)
 		}
 	}
 
+	vcpu->arch.vgic_cpu.live_lrs = live_lrs;
+}
+
+void __hyp_text vgic_v2_restore_state(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	struct vgic_dist *vgic = &kvm->arch.vgic;
+	void __iomem *base = kern_hyp_va(vgic->vctrl_base);
+
+	if (!base)
+		return;
+
+	__vgic_v2_restore_state(vcpu);
+
 	if (!kvm_runs_in_hyp())
 		writel_relaxed(cpu_if->vgic_vmcr, base + GICH_VMCR);
-	vcpu->arch.vgic_cpu.live_lrs = live_lrs;
 }
