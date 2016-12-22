@@ -37,6 +37,17 @@ void vgic_v2_init_lrs(void)
 		vgic_v2_write_lr(i, 0);
 }
 
+void vgic_v2_handle_maintenance(struct kvm_vcpu *vcpu)
+{
+	void __iomem *base = kvm_vgic_global_state.vctrl_base;
+
+	/*
+	 * Disable maintenance interrupt as we only use it to generate an exit
+	 * from the VM.
+	 */
+	writel_relaxed(0, base + GICH_HCR);
+}
+
 void vgic_v2_set_underflow(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v2_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v2;
@@ -391,6 +402,87 @@ out:
 		iounmap(kvm_vgic_global_state.vcpu_base_va);
 
 	return ret;
+}
+
+static void save_elrsr(struct kvm_vcpu *vcpu, void __iomem *base)
+{
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	int nr_lr = kvm_vgic_global_state.nr_lr;
+	u32 elrsr0, elrsr1;
+
+	elrsr0 = readl_relaxed(base + GICH_ELRSR0);
+	if (unlikely(nr_lr > 32))
+		elrsr1 = readl_relaxed(base + GICH_ELRSR1);
+	else
+		elrsr1 = 0;
+
+#ifdef CONFIG_CPU_BIG_ENDIAN
+	cpu_if->vgic_elrsr = ((u64)elrsr0 << 32) | elrsr1;
+#else
+	cpu_if->vgic_elrsr = ((u64)elrsr1 << 32) | elrsr0;
+#endif
+}
+
+static void save_lrs(struct kvm_vcpu *vcpu, void __iomem *base)
+{
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	int i;
+	u64 used_lrs = vcpu->arch.vgic_cpu.used_lrs;
+
+	for (i = 0; i < used_lrs; i++) {
+		if (cpu_if->vgic_elrsr & (1UL << i))
+			cpu_if->vgic_lr[i] &= ~GICH_LR_STATE;
+		else
+			cpu_if->vgic_lr[i] = readl_relaxed(base + GICH_LR0 + (i * 4));
+
+		writel_relaxed(0, base + GICH_LR0 + (i * 4));
+	}
+}
+
+void vgic_v2_save_state(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct vgic_dist *vgic = &kvm->arch.vgic;
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	void __iomem *base = vgic->vctrl_base;
+	u64 used_lrs = vcpu->arch.vgic_cpu.used_lrs;
+
+	if (!base)
+		return;
+
+	if (used_lrs) {
+		cpu_if->vgic_apr = readl_relaxed(base + GICH_APR);
+
+		save_elrsr(vcpu, base);
+		save_lrs(vcpu, base);
+
+		writel_relaxed(0, base + GICH_HCR);
+	} else {
+		cpu_if->vgic_elrsr = ~0UL;
+		cpu_if->vgic_apr = 0;
+	}
+}
+
+void vgic_v2_restore_state(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct vgic_dist *vgic = &kvm->arch.vgic;
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	void __iomem *base = vgic->vctrl_base;
+	u64 used_lrs = vcpu->arch.vgic_cpu.used_lrs;
+	int i;
+
+	if (!base)
+		return;
+
+	if (used_lrs) {
+		writel_relaxed(cpu_if->vgic_hcr, base + GICH_HCR);
+		writel_relaxed(cpu_if->vgic_apr, base + GICH_APR);
+		for (i = 0; i < used_lrs; i++) {
+			writel_relaxed(cpu_if->vgic_lr[i],
+				       base + GICH_LR0 + (i * 4));
+		}
+	}
 }
 
 void vgic_v2_load(struct kvm_vcpu *vcpu)
