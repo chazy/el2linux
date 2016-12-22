@@ -369,9 +369,7 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	struct kvm_cpu_context *guest_ctxt;
 	u64 exit_code;
 
-	vcpu = kern_hyp_va(vcpu);
-
-	host_ctxt = kern_hyp_va(vcpu->arch.host_cpu_context);
+	host_ctxt = vcpu->arch.host_cpu_context;
 	guest_ctxt = &vcpu->arch.ctxt;
 
 	sysreg_save_common_state_vhe(host_ctxt);
