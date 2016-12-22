@@ -717,12 +717,18 @@ void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 
 void kvm_vgic_load(struct kvm_vcpu *vcpu)
 {
-	vgic_v2_load(vcpu);
+	if (kvm_vgic_global_state.type == VGIC_V2)
+		vgic_v2_load(vcpu);
+	else
+		BUG(); /* TODO: Not implemented */
 }
 
 void kvm_vgic_put(struct kvm_vcpu *vcpu)
 {
-	vgic_v2_put(vcpu);
+	if (kvm_vgic_global_state.type == VGIC_V2)
+		vgic_v2_put(vcpu);
+	else
+		BUG(); /* TODO: Not implemented */
 }
 
 int kvm_vgic_vcpu_pending_irq(struct kvm_vcpu *vcpu)
