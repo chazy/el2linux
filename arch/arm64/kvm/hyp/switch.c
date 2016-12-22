@@ -313,6 +313,8 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 #endif
 	write_sysreg(vcpu, tpidr_el2);
 
+	/* make sure we're using the latest VMID for this VM */
+	write_sysreg(vcpu->kvm->arch.vttbr, vttbr_el2);
 
 	/* TODO: Move timer restore to timer code - only look at the timer once */
 	__timer_enable_traps(vcpu);
@@ -320,7 +322,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	__sysreg_save_common_state(host_ctxt);
 
 	__activate_traps(vcpu);
-	__activate_vm(vcpu);
 
 	__sysreg_restore_guest_state(guest_ctxt);
 
@@ -340,9 +341,6 @@ again:
 	__timer_disable_traps(vcpu);
 
 	__deactivate_traps(vcpu);
-#ifndef CONFIG_EL2_KERNEL
-	__deactivate_vm(vcpu);
-#endif
 
 	__sysreg_restore_common_state(host_ctxt);
 

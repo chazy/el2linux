@@ -461,6 +461,8 @@ static void update_vttbr(struct kvm *kvm)
 	BUG_ON(pgd_phys & ~VTTBR_BADDR_MASK);
 	vmid = ((u64)(kvm->arch.vmid) << VTTBR_VMID_SHIFT) & VTTBR_VMID_MASK(kvm_vmid_bits);
 	kvm->arch.vttbr = pgd_phys | vmid;
+	if (kvm_runs_in_hyp())
+		write_sysreg(kvm->arch.vttbr, vttbr_el2);
 
 	spin_unlock(&kvm_vmid_lock);
 }
