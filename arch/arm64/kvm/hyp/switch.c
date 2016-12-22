@@ -298,11 +298,10 @@ static bool __hyp_text __populate_fault_info(struct kvm_vcpu *vcpu,
 	vcpu->arch.fault.far_el2 = far;
 	vcpu->arch.fault.hpfar_el2 = hpfar;
 
-#ifndef CONFIG_EL2_KERNEL
-	return true;
-#else
-	return __early_handle_mmio(vcpu, host_tpidr_el2);
-#endif
+	if (kvm_runs_in_hyp())
+		return __early_handle_mmio(vcpu, host_tpidr_el2);
+	else
+		return true;
 }
 
 int kvm_vcpu_run(struct kvm_vcpu *vcpu)
@@ -323,11 +322,16 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	/* make sure we're using the latest VMID for this VM */
 	write_sysreg(vcpu->kvm->arch.vttbr, vttbr_el2);
 
-	__sysreg_save_common_state(host_ctxt);
+	/* switch sp_el0 */
+	host_ctxt->gp_regs.regs.sp = read_sysreg(sp_el0);
+	write_sysreg(guest_ctxt->gp_regs.regs.sp, sp_el0);
 
-	set_kvm_vbar();
+	/* restore guest return state */
+	write_sysreg_el2(guest_ctxt->gp_regs.regs.pc,     elr);
+	write_sysreg_el2(guest_ctxt->gp_regs.regs.pstate, spsr);
 
-	__sysreg_restore_guest_state(guest_ctxt);
+	/* set the vector to KVM's vector */
+	write_sysreg(__kvm_hyp_vector, vbar_el2);
 
 	/* Jump in the fire! */
 again:
@@ -338,9 +342,15 @@ again:
 	    !__populate_fault_info(vcpu, host_ctxt->host_tpidr))
 		goto again;
 
+	/* switch sp_el0 */
+	guest_ctxt->gp_regs.regs.sp = read_sysreg(sp_el0);
+	write_sysreg(host_ctxt->gp_regs.regs.sp, sp_el0);
 
-	__sysreg_save_guest_state(guest_ctxt);
+	/* save guest return state */
+	guest_ctxt->gp_regs.regs.pc	= read_sysreg_el2(elr);
+	guest_ctxt->gp_regs.regs.pstate	= read_sysreg_el2(spsr);
 
+	/* restore the host's vector */
 	restore_host_vbar();
 
 	__sysreg_restore_common_state(host_ctxt);
