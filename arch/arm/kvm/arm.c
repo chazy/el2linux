@@ -628,7 +628,6 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 			vcpu->arch.power_off || vcpu->arch.pause) {
 			kvm_timer_sync_hwstate(vcpu);
 			local_irq_enable();
-			kvm_pmu_sync_hwstate(vcpu);
 			kvm_vgic_sync_hwstate(vcpu);
 			preempt_enable();
 			continue;
@@ -685,12 +684,10 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		guest_exit();
 		trace_kvm_exit(ret, kvm_vcpu_trap_get_class(vcpu), *vcpu_pc(vcpu));
 
-		kvm_pmu_sync_hwstate(vcpu);
-
 		/*
-		 * We must have synced the PMU and timer state before the vgic
-		 * state so that the vgic can properly sample the updated
-		 * state of the interrupt line.
+		 * We must sync the timer state before the vgic state so that
+		 * the vgic can properly sample the updated state of the
+		 * interrupt line.
 		 */
 		kvm_vgic_sync_hwstate(vcpu);
 
