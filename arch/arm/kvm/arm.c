@@ -312,6 +312,8 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	kvm_vcpu_restore_vmconfig(vcpu);
 #endif
 	kvm_timer_vcpu_load(vcpu);
+	if (irqchip_in_kernel(vcpu->kvm))
+		kvm_vgic_load(vcpu);
 }
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
@@ -601,7 +603,6 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		 */
 		preempt_disable();
 
-		kvm_vgic_load(vcpu);
 		kvm_pmu_flush_hwstate(vcpu);
 
 		/*
