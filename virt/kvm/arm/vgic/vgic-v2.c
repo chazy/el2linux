@@ -318,6 +318,8 @@ int vgic_v2_probe(const struct gic_kvm_info *info)
 {
 	int ret;
 	u32 vtr;
+	void __iomem *base;
+	int i;
 
 	if (!info->vctrl.start) {
 		kvm_err("GICH not present in the firmware table\n");
@@ -343,6 +345,15 @@ int vgic_v2_probe(const struct gic_kvm_info *info)
 		kvm_err("Cannot ioremap GICH\n");
 		return -ENOMEM;
 	}
+
+	/* TODO: Hack for AMD Seattle */
+	base = ioremap(0xe1150000, 0x10000);
+	if (!base) {
+		kvm_err("Cannot ioremap GICH cpu bases\n");
+		return -ENOMEM;
+	}
+	for (i = 0; i < 8; i++)
+		kvm_vgic_global_state.vctrl_cpubase[i] = base + i * 0x200;
 
 	vtr = readl_relaxed(kvm_vgic_global_state.vctrl_base + GICH_VTR);
 	kvm_vgic_global_state.nr_lr = (vtr & 0x3f) + 1;
