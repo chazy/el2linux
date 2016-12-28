@@ -252,6 +252,27 @@ static bool vgic_validate_injection(struct vgic_irq *irq, bool level)
 	return false;
 }
 
+/* return true if direct delivery was successful */
+static bool deliver_virq_now(struct kvm_vcpu *vcpu, struct vgic_irq *irq)
+{
+	/* TODO: Locking challenges */
+
+	/* We can't do this if the VCPU is not running */
+	if (vcpu->cpu == -1)
+		return false;
+
+	if (vcpu->arch.vgic_cpu.used_lrs >= kvm_vgic_global_state.nr_lr)
+		return false;
+
+	vcpu->arch.vgic_cpu.used_lrs++; /* TODO: atomic/barrier */
+
+	spin_lock(&vcpu->arch.vgic_cpu.ap_list_lock);
+	/* re-check if assumptions still hold */
+
+	spin_unlock(&vcpu->arch.vgic_cpu.ap_list_lock);
+
+}
+
 /*
  * Check whether an IRQ needs to (and can) be queued to a VCPU's ap list.
  * Do the queuing if necessary, taking the right locks in the right order.
@@ -260,7 +281,7 @@ static bool vgic_validate_injection(struct vgic_irq *irq, bool level)
  * Needs to be entered with the IRQ lock already held, but will return
  * with all locks dropped.
  */
-bool vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
+void vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
 			   unsigned long flags)
 {
 	struct kvm_vcpu *vcpu;
@@ -290,8 +311,8 @@ retry:
 		 * we have to try to kick the VCPU.
 		 */
 		if (vcpu)
-			kvm_vcpu_kick(vcpu);
-		return false;
+			goto out_kick;
+		return;
 	}
 
 	/*
@@ -336,9 +357,12 @@ retry:
 	spin_unlock(&irq->irq_lock);
 	spin_unlock_irqrestore(&vcpu->arch.vgic_cpu.ap_list_lock, flags);
 
-	kvm_vcpu_kick(vcpu);
-
-	return true;
+out_kick:
+	if (kvm_runs_in_hyp())
+		deliver_virq_now(vcpu, irq);
+	else
+		kvm_vcpu_kick(vcpu);
+	return;
 }
 
 static int vgic_update_irq_pending(struct kvm *kvm, int cpuid,
