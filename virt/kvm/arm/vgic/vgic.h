@@ -47,7 +47,7 @@ void vgic_kick_vcpus(struct kvm *kvm);
 int vgic_check_ioaddr(struct kvm *kvm, phys_addr_t *ioaddr,
 		      phys_addr_t addr, phys_addr_t alignment);
 
-void vgic_v2_process_maintenance(struct kvm_vcpu *vcpu);
+void vgic_v2_clear_uie(struct kvm_vcpu *vcpu);
 void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu);
 void vgic_v2_populate_lr(struct kvm_vcpu *vcpu, struct vgic_irq *irq, int lr);
 void vgic_v2_clear_lr(struct kvm_vcpu *vcpu, int lr);
@@ -81,7 +81,7 @@ static inline void vgic_get_irq_kref(struct vgic_irq *irq)
 }
 
 #ifdef CONFIG_KVM_ARM_VGIC_V3
-void vgic_v3_process_maintenance(struct kvm_vcpu *vcpu);
+void vgic_v3_clear_uie(struct kvm_vcpu *vcpu);
 void vgic_v3_fold_lr_state(struct kvm_vcpu *vcpu);
 void vgic_v3_populate_lr(struct kvm_vcpu *vcpu, struct vgic_irq *irq, int lr);
 void vgic_v3_clear_lr(struct kvm_vcpu *vcpu, int lr);
@@ -100,7 +100,7 @@ int vgic_its_inject_msi(struct kvm *kvm, struct kvm_msi *msi);
 bool vgic_v3_irq_is_active_in_lr(struct kvm_vcpu *vcpu, int intid,
 				 bool *act, bool *pend);
 #else
-static inline void vgic_v3_process_maintenance(struct kvm_vcpu *vcpu)
+static inline void vgic_v3_clear_uie(struct kvm_vcpu *vcpu)
 {
 }
 
