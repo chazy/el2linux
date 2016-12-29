@@ -29,6 +29,28 @@ TRACE_EVENT(vgic_update_irq_pending,
 		  __entry->vcpu_id, __entry->irq, __entry->level)
 );
 
+TRACE_EVENT(vgic_v2_deliver_virq_now,
+	TP_PROTO(int vcpu_id, int irq, int pcpu, int used_lrs),
+	TP_ARGS(vcpu_id, irq, pcpu, used_lrs),
+
+	TP_STRUCT__entry(
+		__field(	int,	vcpu_id	)
+		__field(	int,	irq	)
+		__field(	int,	pcpu	)
+		__field(	int,	used_lrs	)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu_id	= vcpu_id;
+		__entry->irq		= irq;
+		__entry->pcpu		= pcpu;
+		__entry->used_lrs		= used_lrs;
+	),
+
+	TP_printk("VCPU: %d, IRQ %d, pcpu: %d, used_lrs: %d",
+		  __entry->vcpu_id, __entry->irq, __entry->pcpu, __entry->used_lrs)
+);
+
 /*
  * Tracepoints for arch_timer
  */

@@ -52,7 +52,7 @@ struct vgic_global {
 	/* virtual control interface mapping */
 	void __iomem		*vctrl_base;
 
-	void __iomem		*vctrl_cpubase[VGIC_V2_MAX_CPUS];
+	void __iomem		*vctrl_cpubase[NR_CPUS];
 
 	/* Number of implemented list registers */
 	int			nr_lr;

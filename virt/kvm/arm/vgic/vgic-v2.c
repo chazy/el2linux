@@ -21,6 +21,7 @@
 #include <asm/kvm_mmu.h>
 
 #include "vgic.h"
+#include "../trace.h"
 
 static inline void vgic_v2_write_lr(int lr, u32 val)
 {
@@ -74,13 +75,13 @@ static bool lr_signals_eoi_mi(u32 lr_val)
  *   - transferred as is in case of edge sensitive IRQs
  *   - set to the line-level (resample time) for level sensitive IRQs
  */
-void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu)
+void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu, int used_lrs)
 {
 	struct vgic_v2_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v2;
 	int lr;
 	unsigned long flags;
 
-	for (lr = 0; lr < vcpu->arch.vgic_cpu.used_lrs; lr++) {
+	for (lr = 0; lr < used_lrs; lr++) {
 		u32 val = cpuif->vgic_lr[lr];
 		u32 intid = val & GICH_LR_VIRTUALID;
 		struct vgic_irq *irq;
@@ -181,6 +182,66 @@ void vgic_v2_clear_lr(struct kvm_vcpu *vcpu, int lr)
 {
 	vcpu->arch.vgic_cpu.vgic_v2.vgic_lr[lr] = 0;
 }
+
+/**
+ * vgic_v2_deliver_virq_now - Directly deliver vIRQ into another CPU
+ *
+ * We take advantage of a feature present on GICv2 only, where the hypervisor
+ * control interface for each CPU is available from other CPUs at a fixed
+ * address.  The challenge here is synchronization, because we will be writing
+ * directly into the hardware list registers from multiple CPUs.
+ *
+ * These are the actions that can access a CPU's LRs:
+ *   1. vgic_flush_lr_state
+ *   2. vgic_sync_lr_state
+ *   3. deliver_virq_now (can happen multiple times in parallel from different
+ *      PCPUs to the same PCPU).
+ *
+ * (1) and (2) both take the ap_list_lock around critical sections allocating
+ * LRs, *or* they work based on the used_lrs value.  As we will allocate an LR
+ * for this purpose we will bump the used_lrs, so we have to make sure other
+ * CPUs can only observe the updated used_lrs value after we're finished
+ * populating an LR, and also only accesses the LRs once.
+ *
+ * We also have to make sure that we only write into a hardware LR before the
+ * physical CPU runs vgic_sync, since otherwise that LR could linger around
+ * when another vcpu gets scheduled onto the CPU and we loose edge-triggered
+ * interrupt semantics.  We can accomplish this by locking and unlocking the
+ * ap_list_lock in the sync path.  TODO: Attempt making this lockless by only
+ * grabbing the lock when necessary.
+ *
+ * (3) is synchronized simply via holding the AP list lock during this
+ * operation.
+ *
+ * Return true if direct delivery was successful */
+bool vgic_v2_deliver_virq_now(struct kvm_vcpu *vcpu, struct vgic_irq *irq)
+{
+	void __iomem *base;
+	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
+	int used_lrs = vcpu->arch.vgic_cpu.used_lrs;
+	int lr = used_lrs++;
+	int cpu = vcpu->cpu;
+
+	if (vcpu->mode != IN_GUEST_MODE)
+		return false;
+
+	if (used_lrs > kvm_vgic_global_state.nr_lr)
+		return false;
+
+	base = kvm_vgic_global_state.vctrl_cpubase[cpu];
+	vgic_v2_populate_lr(vcpu, irq, lr);
+	writel(cpu_if->vgic_lr[lr], base + GICH_LR0 + (lr * 4));
+
+	smp_wmb(); /* Paired with smp_rmb() in __vgic_v2_restore_state and
+	            * save_rlrsr. */
+	WRITE_ONCE(vcpu->arch.vgic_cpu.used_lrs, used_lrs);
+
+	trace_vgic_v2_deliver_virq_now(irq->intid, vcpu->vcpu_id,
+				       vcpu->cpu, used_lrs);
+
+	return true;
+}
+
 
 void vgic_v2_set_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcrp)
 {
@@ -352,8 +413,9 @@ int vgic_v2_probe(const struct gic_kvm_info *info)
 		kvm_err("Cannot ioremap GICH cpu bases\n");
 		return -ENOMEM;
 	}
-	for (i = 0; i < 8; i++)
+	for (i = 0; i < 8; i++) {
 		kvm_vgic_global_state.vctrl_cpubase[i] = base + i * 0x200;
+	}
 
 	vtr = readl_relaxed(kvm_vgic_global_state.vctrl_base + GICH_VTR);
 	kvm_vgic_global_state.nr_lr = (vtr & 0x3f) + 1;

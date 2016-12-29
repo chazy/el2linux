@@ -121,7 +121,7 @@ typeof(orig) * __hyp_text fname(void)					\
 	return val;							\
 }
 
-void __vgic_v2_save_state(struct kvm_vcpu *vcpu);
+void __vgic_v2_save_state(struct kvm_vcpu *vcpu, int used_lrs);
 void __vgic_v2_restore_state(struct kvm_vcpu *vcpu);
 void vgic_v2_save_state(struct kvm_vcpu *vcpu);
 void vgic_v2_restore_state(struct kvm_vcpu *vcpu);

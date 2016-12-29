@@ -40,7 +40,7 @@ struct vgic_vmcr {
 struct vgic_irq *vgic_get_irq(struct kvm *kvm, struct kvm_vcpu *vcpu,
 			      u32 intid);
 void vgic_put_irq(struct kvm *kvm, struct vgic_irq *irq);
-bool vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
+void vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
 			   unsigned long flags);
 void vgic_kick_vcpus(struct kvm *kvm);
 
@@ -48,8 +48,9 @@ int vgic_check_ioaddr(struct kvm *kvm, phys_addr_t *ioaddr,
 		      phys_addr_t addr, phys_addr_t alignment);
 
 void vgic_v2_clear_uie(struct kvm_vcpu *vcpu);
-void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu);
+void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu, int used_lrs);
 void vgic_v2_populate_lr(struct kvm_vcpu *vcpu, struct vgic_irq *irq, int lr);
+bool vgic_v2_deliver_virq_now(struct kvm_vcpu *vcpu, struct vgic_irq *irq);
 void vgic_v2_clear_lr(struct kvm_vcpu *vcpu, int lr);
 void vgic_v2_set_underflow(struct kvm_vcpu *vcpu);
 int vgic_v2_has_attr_regs(struct kvm_device *dev, struct kvm_device_attr *attr);

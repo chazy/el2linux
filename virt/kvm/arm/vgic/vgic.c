@@ -31,6 +31,9 @@
 #define DEBUG_SPINLOCK_BUG_ON(p)
 #endif
 
+static inline void vgic_populate_lr(struct kvm_vcpu *vcpu,
+				    struct vgic_irq *irq, int lr);
+
 struct vgic_global __section(.hyp.text) kvm_vgic_global_state;
 
 /*
@@ -252,25 +255,12 @@ static bool vgic_validate_injection(struct vgic_irq *irq, bool level)
 	return false;
 }
 
-/* return true if direct delivery was successful */
 static bool deliver_virq_now(struct kvm_vcpu *vcpu, struct vgic_irq *irq)
 {
-	/* TODO: Locking challenges */
-
-	/* We can't do this if the VCPU is not running */
-	if (vcpu->cpu == -1)
-		return false;
-
-	if (vcpu->arch.vgic_cpu.used_lrs >= kvm_vgic_global_state.nr_lr)
-		return false;
-
-	vcpu->arch.vgic_cpu.used_lrs++; /* TODO: atomic/barrier */
-
-	spin_lock(&vcpu->arch.vgic_cpu.ap_list_lock);
-	/* re-check if assumptions still hold */
-
-	spin_unlock(&vcpu->arch.vgic_cpu.ap_list_lock);
-
+	if (kvm_vgic_global_state.type == VGIC_V2)
+		return vgic_v2_deliver_virq_now(vcpu, irq);
+	else
+		return false; /* Direct injection not supported on GICv3 */
 }
 
 /*
@@ -285,6 +275,7 @@ void vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
 			   unsigned long flags)
 {
 	struct kvm_vcpu *vcpu;
+	bool nokick = false;
 
 	DEBUG_SPINLOCK_BUG_ON(!spin_is_locked(&irq->irq_lock));
 
@@ -310,8 +301,10 @@ retry:
 		 * trap on EOI. To ensure prompt delivery of that interrupt,
 		 * we have to try to kick the VCPU.
 		 */
-		if (vcpu)
-			goto out_kick;
+		if (vcpu) {
+			/* TODO: direct inject by updating existing LR */
+			kvm_vcpu_kick(vcpu);
+		}
 		return;
 	}
 
@@ -354,15 +347,14 @@ retry:
 	list_add_tail(&irq->ap_list, &vcpu->arch.vgic_cpu.ap_list_head);
 	irq->vcpu = vcpu;
 
+	if (kvm_runs_in_hyp())
+		nokick = deliver_virq_now(vcpu, irq);
+
 	spin_unlock(&irq->irq_lock);
 	spin_unlock_irqrestore(&vcpu->arch.vgic_cpu.ap_list_lock, flags);
 
-out_kick:
-	if (kvm_runs_in_hyp())
-		deliver_virq_now(vcpu, irq);
-	else
+	if (!nokick)
 		kvm_vcpu_kick(vcpu);
-	return;
 }
 
 static int vgic_update_irq_pending(struct kvm *kvm, int cpuid,
@@ -589,10 +581,10 @@ static inline void vgic_clear_uie(struct kvm_vcpu *vcpu)
 		vgic_v3_clear_uie(vcpu);
 }
 
-static inline void vgic_fold_lr_state(struct kvm_vcpu *vcpu)
+static inline void vgic_fold_lr_state(struct kvm_vcpu *vcpu, int used_lrs)
 {
 	if (kvm_vgic_global_state.type == VGIC_V2)
-		vgic_v2_fold_lr_state(vcpu);
+		vgic_v2_fold_lr_state(vcpu, used_lrs);
 	else
 		vgic_v3_fold_lr_state(vcpu);
 }
@@ -688,10 +680,10 @@ next:
 		vgic_clear_lr(vcpu, count);
 }
 
-static inline void vgic_save_state(struct kvm_vcpu *vcpu)
+static inline void vgic_save_state(struct kvm_vcpu *vcpu, int used_lrs)
 {
 	if (kvm_vgic_global_state.type == VGIC_V2)
-		__vgic_v2_save_state(vcpu);
+		__vgic_v2_save_state(vcpu, used_lrs);
 	else
 		BUG(); /* TODO: Not Implemented */
 }
@@ -700,16 +692,27 @@ static inline void vgic_save_state(struct kvm_vcpu *vcpu)
 void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
-	u64 used_lrs = vcpu->arch.vgic_cpu.used_lrs;
+	u64 used_lrs;
+	unsigned long flags;
+
+	/*
+	 * Ensure that vgic_v2_deliver_virq_now ony injects LRs before the
+	 * receiving PCPU runs this sync function.  See comment on
+	 * vgic_v2_deliver_virq_now for more information.
+	 */
+	spin_lock_irqsave(&vgic_cpu->ap_list_lock, flags);
+	spin_unlock_irqrestore(&vgic_cpu->ap_list_lock, flags);
+
+	used_lrs = READ_ONCE(vcpu->arch.vgic_cpu.used_lrs);
 
 	if (!used_lrs && list_empty(&vgic_cpu->ap_list_head))
 		return;
 
 	if (kvm_runs_in_hyp())
-		vgic_save_state(vcpu);
+		vgic_save_state(vcpu, used_lrs);
 
 	vgic_clear_uie(vcpu);
-	vgic_fold_lr_state(vcpu);
+	vgic_fold_lr_state(vcpu, used_lrs);
 	vgic_prune_ap_list(vcpu);
 
 	vgic_cpu->used_lrs = 0;
