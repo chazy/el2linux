@@ -72,8 +72,6 @@ void __hyp_text __vgic_v2_save_state(struct kvm_vcpu *vcpu, int used_lrs)
 
 		save_elrsr(vcpu, base, used_lrs);
 		save_lrs(vcpu, base, used_lrs);
-
-		writel_relaxed(0, base + GICH_HCR);
 	} else {
 		cpu_if->vgic_elrsr = ~0UL;
 		cpu_if->vgic_apr = 0;
@@ -91,8 +89,11 @@ void __hyp_text vgic_v2_save_state(struct kvm_vcpu *vcpu)
 	if (!base)
 		return;
 
-	if (!kvm_runs_in_hyp())
+	if (!kvm_runs_in_hyp()) {
+		if (used_lrs)
+			writel_relaxed(0, base + GICH_HCR);
 		cpu_if->vgic_vmcr = readl_relaxed(base + GICH_VMCR);
+	}
 
 	__vgic_v2_save_state(vcpu, used_lrs);
 }
@@ -108,7 +109,6 @@ void __hyp_text __vgic_v2_restore_state(struct kvm_vcpu *vcpu)
 	u64 used_lrs = READ_ONCE(vcpu->arch.vgic_cpu.used_lrs);
 
 	if (used_lrs) {
-		writel_relaxed(cpu_if->vgic_hcr, base + GICH_HCR);
 		writel_relaxed(cpu_if->vgic_apr, base + GICH_APR);
 		for (i = 0; i < used_lrs; i++) {
 
@@ -131,6 +131,10 @@ void __hyp_text vgic_v2_restore_state(struct kvm_vcpu *vcpu)
 
 	__vgic_v2_restore_state(vcpu);
 
-	if (!kvm_runs_in_hyp())
+	if (!kvm_runs_in_hyp()) {
+		u64 used_lrs = READ_ONCE(vcpu->arch.vgic_cpu.used_lrs);
+		if (used_lrs)
+			writel_relaxed(cpu_if->vgic_hcr, base + GICH_HCR);
 		writel_relaxed(cpu_if->vgic_vmcr, base + GICH_VMCR);
+	}
 }

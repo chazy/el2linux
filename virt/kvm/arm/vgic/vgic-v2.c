@@ -41,7 +41,12 @@ void vgic_v2_init_lrs(void)
 void vgic_v2_clear_uie(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v2_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v2;
-	cpuif->vgic_hcr &= ~GICH_HCR_UIE;
+	void __iomem *base = kvm_vgic_global_state.vctrl_base;
+
+	if (cpuif->vgic_hcr & ~GICH_HCR_UIE) {
+		cpuif->vgic_hcr &= ~GICH_HCR_UIE;
+		writel_relaxed(cpuif->vgic_hcr, base + GICH_HCR);
+	}
 }
 
 void vgic_v2_handle_maintenance(struct kvm_vcpu *vcpu)
@@ -53,13 +58,16 @@ void vgic_v2_handle_maintenance(struct kvm_vcpu *vcpu)
 	 * from the VM.
 	 */
 	writel_relaxed(0, base + GICH_HCR);
+	WARN_ONCE(1, "Unexpected maintenance interrupt firing\n");
 }
 
 void vgic_v2_set_underflow(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v2_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v2;
+	void __iomem *base = kvm_vgic_global_state.vctrl_base;
 
 	cpuif->vgic_hcr |= GICH_HCR_UIE;
+	writel_relaxed(cpuif->vgic_hcr, base + GICH_HCR);
 }
 
 static bool lr_signals_eoi_mi(u32 lr_val)
@@ -450,8 +458,8 @@ int vgic_v2_probe(const struct gic_kvm_info *info)
 void vgic_v2_load(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
-	struct vgic_dist *vgic = &vcpu->kvm->arch.vgic;
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	void __iomem *base = kvm_vgic_global_state.vctrl_base;
 
 	if (!kvm_runs_in_hyp())
 		return;
@@ -459,7 +467,8 @@ void vgic_v2_load(struct kvm_vcpu *vcpu)
 	if (vgic_cpu->loaded)
 		return;
 
-	writel_relaxed(cpu_if->vgic_vmcr, vgic->vctrl_base + GICH_VMCR);
+	writel_relaxed(cpu_if->vgic_vmcr, base + GICH_VMCR);
+	writel_relaxed(cpu_if->vgic_hcr, base + GICH_HCR);
 
 	vgic_cpu->loaded = true;
 }
@@ -467,8 +476,8 @@ void vgic_v2_load(struct kvm_vcpu *vcpu)
 void vgic_v2_put(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
-	struct vgic_dist *vgic = &vcpu->kvm->arch.vgic;
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	void __iomem *base = kvm_vgic_global_state.vctrl_base;
 	int i;
 
 	if (!kvm_runs_in_hyp())
@@ -477,7 +486,8 @@ void vgic_v2_put(struct kvm_vcpu *vcpu)
 	if (!vgic_cpu->loaded)
 		return;
 
-	cpu_if->vgic_vmcr = readl_relaxed(vgic->vctrl_base + GICH_VMCR);
+	cpu_if->vgic_vmcr = readl_relaxed(base + GICH_VMCR);
+	writel_relaxed(0, base + GICH_HCR);
 
 	vgic_cpu->loaded = false;
 
