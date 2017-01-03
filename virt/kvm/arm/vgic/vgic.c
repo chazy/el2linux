@@ -282,6 +282,8 @@ void vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
 retry:
 	vcpu = vgic_target_oracle(irq);
 	if (irq->vcpu || !vcpu) {
+		struct kvm_vcpu *old_vcpu = irq->vcpu;
+
 		/*
 		 * If this IRQ is already on a VCPU's ap_list, then it
 		 * cannot be moved or modified and there is no more work for
@@ -294,17 +296,13 @@ retry:
 		spin_unlock_irqrestore(&irq->irq_lock, flags);
 
 		/*
-		 * If the VCPU is not NULL, we could be queueing an
-		 * edge-triggered interrupt for a VCPU which is already
-		 * running and is not about to exit, because the VCPU has
-		 * entered the VM with the interrupt pending and it wouldn't
-		 * trap on EOI. To ensure prompt delivery of that interrupt,
-		 * we have to try to kick the VCPU.
+		 * If we're queueing an edge-triggered interupt which is
+		 * already on the AP list of a VCPU, then kick that VCPU so
+		 * that it picks up the new pending interrupt or moves the
+		 * interrupt off its AP list in case it was migrated away.
 		 */
-		if (vcpu) {
-			/* TODO: direct inject by updating existing LR */
-			kvm_vcpu_kick(vcpu);
-		}
+		if (old_vcpu && irq->config == VGIC_CONFIG_EDGE)
+			kvm_vcpu_kick(old_vcpu);
 		return;
 	}
 
