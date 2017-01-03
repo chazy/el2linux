@@ -129,6 +129,8 @@ void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu, int used_lrs)
 			irq->pending = irq->line_level || irq->soft_pending;
 		}
 
+		irq->lr = -1;
+
 		spin_unlock(&irq->irq_lock);
 		vgic_put_irq(vcpu->kvm, irq);
 	}
@@ -183,6 +185,7 @@ void vgic_v2_populate_lr(struct kvm_vcpu *vcpu, struct vgic_irq *irq, int lr)
 	val |= (irq->priority >> 3) << GICH_LR_PRIORITY_SHIFT;
 
 	vcpu->arch.vgic_cpu.vgic_v2.vgic_lr[lr] = val;
+	irq->lr = lr;
 }
 
 void vgic_v2_clear_lr(struct kvm_vcpu *vcpu, int lr)

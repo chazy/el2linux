@@ -88,6 +88,11 @@ struct vgic_irq {
 					 * this is queued on.
 					 */
 
+	int lr;				/* When this IRQ is queued onto an LR of
+					 * a CPU, this is the LR used. -1 when
+					 * not queued.
+					 */
+
 	struct kvm_vcpu *target_vcpu;	/* The VCPU that this interrupt should
 					 * be sent to, as a result of the
 					 * targets reg (v2) or the
