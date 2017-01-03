@@ -229,22 +229,51 @@ bool vgic_v2_deliver_virq_now(struct kvm_vcpu *vcpu, struct vgic_irq *irq)
 	void __iomem *base;
 	struct vgic_v2_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v2;
 	int used_lrs = vcpu->arch.vgic_cpu.used_lrs;
-	int lr = used_lrs++;
 	int cpu = vcpu->cpu;
+
+	/* Level-triggered IRQs always exit on EOI to re-sample the line */
+	if (irq->lr >= 0 && irq->config == VGIC_CONFIG_LEVEL)
+		return false;
 
 	if (vcpu->mode != IN_GUEST_MODE)
 		return false;
 
-	if (used_lrs > kvm_vgic_global_state.nr_lr)
-		return false;
-
 	base = kvm_vgic_global_state.vctrl_cpubase[cpu];
-	vgic_v2_populate_lr(vcpu, irq, lr);
-	writel(cpu_if->vgic_lr[lr], base + GICH_LR0 + (lr * 4));
+	if (irq->lr >= 0) {
+		void __iomem *lr_base = base + GICH_LR0 + (irq->lr * 4);
 
-	smp_wmb(); /* Paired with smp_rmb() in __vgic_v2_restore_state and
-	            * save_rlrsr. */
-	WRITE_ONCE(vcpu->arch.vgic_cpu.used_lrs, used_lrs);
+		cpu_if->vgic_lr[irq->lr] = readl_relaxed(lr_base);
+
+		/*
+		 * We cannot mess with an interrupt that's active or pending
+		 * because we cannot make sure we won't race with guest
+		 * accesses and loose state.
+		 */
+		if (cpu_if->vgic_lr[irq->lr] & GICH_LR_STATE)
+			return false;
+
+		/*
+		 * If the VCPU has deactivated the virtual interrupt we don't
+		 * want to set it again in the populate function as this woudl
+		 * essentially mask the LR.
+		 */
+		irq->active = false;
+
+		vgic_v2_populate_lr(vcpu, irq, irq->lr);
+		writel(cpu_if->vgic_lr[irq->lr], lr_base);
+	} else {
+		int lr = used_lrs;
+		if (lr >= kvm_vgic_global_state.nr_lr)
+			return false;
+
+		vgic_v2_populate_lr(vcpu, irq, lr);
+		writel(cpu_if->vgic_lr[lr], base + GICH_LR0 + (lr * 4));
+
+		used_lrs++;
+		smp_wmb(); /* Paired with smp_rmb() in __vgic_v2_restore_state and
+			    * save_rlrsr. */
+		WRITE_ONCE(vcpu->arch.vgic_cpu.used_lrs, used_lrs);
+	}
 
 	trace_vgic_v2_deliver_virq_now(irq->intid, vcpu->vcpu_id,
 				       vcpu->cpu, used_lrs);

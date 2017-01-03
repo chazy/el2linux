@@ -281,7 +281,7 @@ void vgic_queue_irq_unlock(struct kvm *kvm, struct vgic_irq *irq,
 
 retry:
 	vcpu = vgic_target_oracle(irq);
-	if (irq->vcpu || !vcpu) {
+	if ((irq->vcpu && irq->vcpu != vcpu) || !vcpu) {
 		struct kvm_vcpu *old_vcpu = irq->vcpu;
 
 		/*
@@ -328,8 +328,8 @@ retry:
 	 *
 	 * In both cases, drop the locks and retry.
 	 */
-
-	if (unlikely(irq->vcpu || vcpu != vgic_target_oracle(irq))) {
+	if ((irq->vcpu && irq->vcpu != vcpu) ||
+	    unlikely(vcpu != vgic_target_oracle(irq))) {
 		spin_unlock(&irq->irq_lock);
 		spin_unlock_irqrestore(&vcpu->arch.vgic_cpu.ap_list_lock, flags);
 
@@ -337,15 +337,18 @@ retry:
 		goto retry;
 	}
 
-	/*
-	 * Grab a reference to the irq to reflect the fact that it is
-	 * now in the ap_list.
-	 */
-	vgic_get_irq_kref(irq);
-	list_add_tail(&irq->ap_list, &vcpu->arch.vgic_cpu.ap_list_head);
-	irq->vcpu = vcpu;
+	if (!irq->vcpu) {
+		/*
+		 * Grab a reference to the irq to reflect the fact that it is
+		 * now in the ap_list.
+		 */
+		vgic_get_irq_kref(irq);
+		list_add_tail(&irq->ap_list, &vcpu->arch.vgic_cpu.ap_list_head);
+		irq->vcpu = vcpu;
+	}
 
-	if (kvm_runs_in_hyp())
+	/* Only directly inject pending (not active) irqs */
+	if (kvm_runs_in_hyp() && irq->pending)
 		nokick = deliver_virq_now(vcpu, irq);
 
 	spin_unlock(&irq->irq_lock);
