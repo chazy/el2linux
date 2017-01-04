@@ -208,6 +208,19 @@ static int kvm_timer_update_state(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+static void timer_save_state(struct kvm_vcpu *vcpu)
+{
+	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
+
+	if (timer->enabled) {
+		timer->cntv_ctl = read_sysreg_el0(cntv_ctl);
+		timer->cntv_cval = read_sysreg_el0(cntv_cval);
+	}
+
+	/* Disable the virtual timer */
+	write_sysreg_el0(0, cntv_ctl);
+}
+
 /*
  * Schedule the background timer before calling kvm_vcpu_block, so that this
  * thread is removed from its waitqueue and made runnable when there's a timer
@@ -238,10 +251,28 @@ void kvm_timer_schedule(struct kvm_vcpu *vcpu)
 	timer_arm(timer, kvm_timer_compute_delta(vcpu));
 }
 
+static void timer_restore_state(struct kvm_vcpu *vcpu)
+{
+	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
+
+	if (timer->enabled) {
+		write_sysreg_el0(timer->cntv_cval, cntv_cval);
+		isb();
+		write_sysreg_el0(timer->cntv_ctl, cntv_ctl);
+	}
+}
+
 void kvm_timer_unschedule(struct kvm_vcpu *vcpu)
 {
 	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
 	timer_disarm(timer);
+}
+
+static void set_cntvoff(u64 cntvoff)
+{
+	u32 low = cntvoff & GENMASK(31, 0);
+	u32 high = (cntvoff >> 32) & GENMASK(31, 0);
+	kvm_call_hyp(__kvm_timer_set_cntvoff, low, high);
 }
 
 /**
@@ -258,7 +289,7 @@ void kvm_timer_flush_hwstate(struct kvm_vcpu *vcpu)
 	int ret;
 
 	if (kvm_timer_update_state(vcpu))
-		return;
+		goto out;
 
 	/*
 	* If we enter the guest with the virtual input level to the VGIC
@@ -301,7 +332,7 @@ void kvm_timer_flush_hwstate(struct kvm_vcpu *vcpu)
 	 * - value to be programmed is "active clear"
 	 */
 	if (timer->active_cleared_last && !phys_active)
-		return;
+		goto out;
 
 	ret = irq_set_irqchip_state(host_vtimer_irq,
 				    IRQCHIP_STATE_ACTIVE,
@@ -309,6 +340,9 @@ void kvm_timer_flush_hwstate(struct kvm_vcpu *vcpu)
 	WARN_ON(ret);
 
 	timer->active_cleared_last = !phys_active;
+out:
+	set_cntvoff(vcpu->kvm->arch.timer.cntvoff);
+	timer_restore_state(vcpu);
 }
 
 /**
@@ -323,6 +357,9 @@ void kvm_timer_sync_hwstate(struct kvm_vcpu *vcpu)
 	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
 
 	BUG_ON(timer_is_armed(timer));
+
+	timer_save_state(vcpu);
+	set_cntvoff(0);
 
 	/*
 	 * The guest could have modified the timer registers or the timer

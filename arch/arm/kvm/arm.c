@@ -622,9 +622,9 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 
 		if (ret <= 0 || need_new_vmid_gen(vcpu->kvm) ||
 			vcpu->arch.power_off || vcpu->arch.pause) {
+			kvm_timer_sync_hwstate(vcpu);
 			local_irq_enable();
 			kvm_pmu_sync_hwstate(vcpu);
-			kvm_timer_sync_hwstate(vcpu);
 			kvm_vgic_sync_hwstate(vcpu);
 			preempt_enable();
 			continue;
@@ -650,6 +650,13 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		kvm_arm_clear_debug(vcpu);
 
 		/*
+		 * Sync the timer hardware state before enabling interrupts as
+		 * we don't want to handle vtimer interrupts in the host
+		 * kernel.
+		 */
+		kvm_timer_sync_hwstate(vcpu);
+
+		/*
 		 * We may have taken a host interrupt in HYP mode (ie
 		 * while executing the guest). This interrupt is still
 		 * pending, as we haven't serviced it yet!
@@ -672,14 +679,13 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		guest_exit();
 		trace_kvm_exit(ret, kvm_vcpu_trap_get_class(vcpu), *vcpu_pc(vcpu));
 
-		/*
-		 * We must sync the PMU and timer state before the vgic state so
-		 * that the vgic can properly sample the updated state of the
-		 * interrupt line.
-		 */
 		kvm_pmu_sync_hwstate(vcpu);
-		kvm_timer_sync_hwstate(vcpu);
 
+		/*
+		 * We must have synced the PMU and timer state before the vgic
+		 * state so that the vgic can properly sample the updated
+		 * state of the interrupt line.
+		 */
 		kvm_vgic_sync_hwstate(vcpu);
 
 		preempt_enable();

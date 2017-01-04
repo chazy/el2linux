@@ -21,6 +21,12 @@
 
 #include <asm/kvm_hyp.h>
 
+void __hyp_text __kvm_timer_set_cntvoff(u32 cntvoff_low, u32 cntvoff_high)
+{
+	u64 cntvoff = (u64)cntvoff_high << 32 | cntvoff_low;
+	write_sysreg(cntvoff, cntvoff_el2);
+}
+
 void __hyp_text enable_phys_timer(void)
 {
 	u64 val;
@@ -45,44 +51,18 @@ void __hyp_text disable_phys_timer(void)
 	write_sysreg(val, cnthctl_el2);
 }
 
-/* vcpu is already in the HYP VA space */
-void __hyp_text __timer_save_state(struct kvm_vcpu *vcpu)
+void __hyp_text __timer_disable_traps(struct kvm_vcpu *vcpu)
 {
-	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
-
-	if (timer->enabled) {
-		timer->cntv_ctl = read_sysreg_el0(cntv_ctl);
-		timer->cntv_cval = read_sysreg_el0(cntv_cval);
-	}
-
-	/* Disable the virtual timer */
-	write_sysreg_el0(0, cntv_ctl);
-
 	/*
 	 * We don't need to do this for VHE since the host kernel runs in EL2
 	 * with HCR_EL2.TGE ==1, which makes those bits have no impact.
 	 */
 	if (!kvm_runs_in_hyp())
 		enable_phys_timer();
-
-	/* Clear cntvoff for the host */
-	write_sysreg(0, cntvoff_el2);
 }
 
-void __hyp_text __timer_restore_state(struct kvm_vcpu *vcpu)
+void __hyp_text __timer_enable_traps(struct kvm_vcpu *vcpu)
 {
-	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
-	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
-
-	/* Those bits are already configured at boot on VHE-system */
-
 	if (!kvm_runs_in_hyp())
 		disable_phys_timer();
-
-	if (timer->enabled) {
-		write_sysreg(kvm->arch.timer.cntvoff, cntvoff_el2);
-		write_sysreg_el0(timer->cntv_cval, cntv_cval);
-		isb();
-		write_sysreg_el0(timer->cntv_ctl, cntv_ctl);
-	}
 }
