@@ -157,16 +157,6 @@ bool kvm_timer_should_fire(struct kvm_vcpu *vcpu)
 	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
 	cycle_t cval, now;
 
-	/*
-	 * If somebody is asking if the timer should fire, but the timer state
-	 * is maintained in hardware, we need to take a snapshot of the
-	 * current hardware state first.
-	 */
-	if (timer->loaded) {
-		timer->cntv_ctl = read_sysreg_el0(cntv_ctl);
-		timer->cntv_cval = read_sysreg_el0(cntv_cval);
-	}
-
 	if (!kvm_timer_irq_can_fire(vcpu))
 		return false;
 
