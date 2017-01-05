@@ -89,8 +89,8 @@ static void kvm_timer_inject_irq_work(struct work_struct *work)
 	struct kvm_vcpu *vcpu;
 
 	vcpu = container_of(work, struct kvm_vcpu, arch.timer_cpu.expired);
-	vcpu->arch.timer_cpu.armed = false;
 
+	WARN_ON(vcpu->arch.timer_cpu.loaded);
 	WARN_ON(!kvm_timer_should_fire(vcpu));
 
 	/*
@@ -322,7 +322,18 @@ void kvm_timer_vcpu_load(struct kvm_vcpu *vcpu)
 	WARN_ON(ret);
 
 	set_cntvoff(vcpu->kvm->arch.timer.cntvoff);
-	timer_restore_state(vcpu);
+
+	/*
+	 * If we armed a soft timer and potentially queued work, we have to
+	 * cancel this, but cannot do it here, because canceling work can
+	 * sleep and we can be in the middle of a preempt notifier call.
+	 * Instead, when the timer has been armed, we know the return path
+	 * from kvm_vcpu_block will call kvm_timer_unschedule, so we can defer
+	 * restoring the state and canceling any soft timers and work items
+	 * until then.
+	 */
+	if (!timer_is_armed(timer))
+		timer_restore_state(vcpu);
 
 	if (kvm_runs_in_hyp())
 		disable_phys_timer();
