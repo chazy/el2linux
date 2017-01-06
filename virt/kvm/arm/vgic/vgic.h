@@ -67,6 +67,9 @@ int vgic_register_dist_iodev(struct kvm *kvm, gpa_t dist_base_address,
 void vgic_v2_load(struct kvm_vcpu *vcpu);
 void vgic_v2_put(struct kvm_vcpu *vcpu);
 
+bool vgic_v2_irq_is_active_in_lr(struct kvm_vcpu *vcpu, int intid,
+				 bool *act, bool *pend);
+
 static inline void vgic_get_irq_kref(struct vgic_irq *irq)
 {
 	if (irq->intid < VGIC_MIN_LPI)
@@ -92,6 +95,8 @@ bool vgic_has_its(struct kvm *kvm);
 int kvm_vgic_register_its_device(void);
 void vgic_enable_lpis(struct kvm_vcpu *vcpu);
 int vgic_its_inject_msi(struct kvm *kvm, struct kvm_msi *msi);
+bool vgic_v3_irq_is_active_in_lr(struct kvm_vcpu *vcpu, int intid,
+				 bool *act, bool *pend);
 #else
 static inline void vgic_v3_process_maintenance(struct kvm_vcpu *vcpu)
 {
@@ -166,6 +171,13 @@ static inline void vgic_enable_lpis(struct kvm_vcpu *vcpu)
 static inline int vgic_its_inject_msi(struct kvm *kvm, struct kvm_msi *msi)
 {
 	return -ENODEV;
+}
+
+static inline bool  vgic_v3_irq_is_active_in_lr(struct kvm_vcpu *vcpu,
+						int intid,
+						bool *act, bool *pend)
+{
+	return false;
 }
 #endif
 

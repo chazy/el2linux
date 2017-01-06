@@ -362,3 +362,33 @@ int vgic_v3_probe(const struct gic_kvm_info *info)
 
 	return 0;
 }
+
+bool vgic_v3_irq_is_active_in_lr(struct kvm_vcpu *vcpu, int intid,
+				 bool *act, bool *pend)
+{
+	struct vgic_v3_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v3;
+	u32 model = vcpu->kvm->arch.vgic.vgic_model;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	int i;
+
+	for (i = 0; i < vgic_cpu->used_lrs; i++) {
+		u64 val = cpuif->vgic_lr[i];
+		u32 lr_intid;
+
+		if (model == KVM_DEV_TYPE_ARM_VGIC_V3)
+			lr_intid = val & ICH_LR_VIRTUAL_ID_MASK;
+		else
+			lr_intid = val & GICH_LR_VIRTUALID;
+
+		if (lr_intid != intid)
+			continue;
+
+		if (act)
+			*act = val & ICH_LR_ACTIVE_BIT;
+		if (pend)
+			*pend = val & ICH_LR_PENDING_BIT;
+		return true;
+	}
+
+	return false;
+}

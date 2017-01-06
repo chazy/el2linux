@@ -742,21 +742,35 @@ void vgic_kick_vcpus(struct kvm *kvm)
 	}
 }
 
+static inline bool vgic_get_irq_lr_state(struct kvm_vcpu *vcpu, int intid,
+					 bool *act, bool *pend)
+{
+	if (kvm_vgic_global_state.type == VGIC_V2)
+		return vgic_v2_irq_is_active_in_lr(vcpu, intid, act, pend);
+	else
+		return vgic_v3_irq_is_active_in_lr(vcpu, intid, act, pend);
+}
+
 bool kvm_vgic_map_is_active(struct kvm_vcpu *vcpu, unsigned int virt_irq)
 {
-	struct vgic_irq *irq = vgic_get_irq(vcpu->kvm, vcpu, virt_irq);
-	bool map_is_active;
+	struct vgic_irq *irq;
+	bool active;
 
 	if (!vgic_initialized(vcpu->kvm))
 		return false;
 
 	DEBUG_SPINLOCK_BUG_ON(!irqs_disabled());
 
+	if (vgic_get_irq_lr_state(vcpu, virt_irq, &active, NULL))
+		return active;
+
+	irq = vgic_get_irq(vcpu->kvm, vcpu, virt_irq);
+
 	spin_lock(&irq->irq_lock);
-	map_is_active = irq->hw && irq->active;
+	active = irq->hw && irq->active;
 	spin_unlock(&irq->irq_lock);
 	vgic_put_irq(vcpu->kvm, irq);
 
-	return map_is_active;
+	return active;
 }
 

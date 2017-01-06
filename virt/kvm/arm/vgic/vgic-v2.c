@@ -411,3 +411,26 @@ void vgic_v2_put(struct kvm_vcpu *vcpu)
 
 	vgic_cpu->loaded = false;
 }
+
+bool vgic_v2_irq_is_active_in_lr(struct kvm_vcpu *vcpu, int intid,
+				 bool *act, bool *pend)
+{
+	struct vgic_v2_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v2;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	int i;
+
+	for (i = 0; i < vgic_cpu->used_lrs; i++) {
+		u32 val = cpuif->vgic_lr[i];
+
+		if ((val & GICH_LR_VIRTUALID) != intid)
+			continue;
+
+		if (act)
+			*act = val & GICH_LR_ACTIVE_BIT;
+		if (pend)
+			*pend = val & GICH_LR_PENDING_BIT;
+		return true;
+	}
+
+	return false;
+}
