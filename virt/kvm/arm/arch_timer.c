@@ -38,6 +38,7 @@ static u32 host_vtimer_irq_flags;
 
 static bool kvm_timer_irq_can_fire(struct kvm_vcpu *vcpu);
 static void kvm_timer_update_irq(struct kvm_vcpu *vcpu, bool new_level);
+static bool kvm_timer_should_fire(struct kvm_vcpu *vcpu);
 
 static cycle_t kvm_phys_timer_read(void)
 {
@@ -152,7 +153,7 @@ static bool kvm_timer_irq_can_fire(struct kvm_vcpu *vcpu)
 		(timer->cntv_ctl & ARCH_TIMER_CTRL_ENABLE);
 }
 
-bool kvm_timer_should_fire(struct kvm_vcpu *vcpu)
+static bool kvm_timer_should_fire(struct kvm_vcpu *vcpu)
 {
 	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
 	cycle_t cval, now;
@@ -164,6 +165,23 @@ bool kvm_timer_should_fire(struct kvm_vcpu *vcpu)
 	now = kvm_phys_timer_read() - vcpu->kvm->arch.timer.cntvoff;
 
 	return cval <= now;
+}
+
+/*
+ * Can be called before and after kvm_timer_schedule and therefore must
+ * consider that the timer can both be loaded on the hardware or maintained in
+ * software.
+ */
+bool kvm_timer_is_pending(struct kvm_vcpu *vcpu)
+{
+	struct arch_timer_cpu *timer = &vcpu->arch.timer_cpu;
+
+	if (timer->irq.level)
+		return true;
+	else if (timer->loaded)
+		return timer->irq.level;
+	else
+		return kvm_timer_should_fire(vcpu);
 }
 
 static void kvm_timer_update_irq(struct kvm_vcpu *vcpu, bool new_level)
