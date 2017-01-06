@@ -358,8 +358,23 @@ void kvm_timer_sync_hwstate(struct kvm_vcpu *vcpu)
 	if (timer->irq.level) {
 		timer->cntv_ctl = read_sysreg_el0(cntv_ctl);
 		timer->cntv_cval = read_sysreg_el0(cntv_cval);
-		if (!kvm_timer_should_fire(vcpu))
+		if (!kvm_timer_should_fire(vcpu)) {
 			kvm_timer_update_irq(vcpu, false);
+
+			/*
+			 * If the guest disabled the timer without acking the
+			 * interrupt, then we must make sure the physical and
+			 * virtual active states are in sync by deactivating
+			 * the physical interrupt, because otherwise we
+			 * wouldn't see the next timer interrupt in the host.
+			 */
+			if (!kvm_vgic_map_is_active(vcpu, timer->irq.irq)) {
+				int ret;
+				ret = irq_set_irqchip_state(host_vtimer_irq,
+							    IRQCHIP_STATE_ACTIVE,
+							    false);
+			}
+		}
 	}
 }
 
