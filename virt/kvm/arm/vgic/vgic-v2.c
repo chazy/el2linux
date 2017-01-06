@@ -145,7 +145,9 @@ void vgic_v2_populate_lr(struct kvm_vcpu *vcpu, struct vgic_irq *irq, int lr)
 	u32 val = irq->intid;
 
 	if (irq->pending) {
-		val |= GICH_LR_PENDING_BIT;
+		/* The active+pending state cannot be used for HW irqs */
+		if (!(irq->hw && irq->active))
+			val |= GICH_LR_PENDING_BIT;
 
 		if (irq->config == VGIC_CONFIG_EDGE)
 			irq->pending = false;
