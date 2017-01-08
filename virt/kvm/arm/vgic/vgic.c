@@ -806,6 +806,24 @@ static inline bool vgic_get_irq_lr_state(struct kvm_vcpu *vcpu, int intid,
 		return vgic_v3_irq_is_active_in_lr(vcpu, intid, act, pend);
 }
 
+/*
+ * kvm_vgic_map_is_active - Test if a mapped IRQ is active
+ * @vcpu: The vcpu pointer for a PPI, otherwise ignored.
+ * @virt_irq: The INTID
+ *
+ * Mapped IRQs are physical IRQs which are forwarded to the VM as virtual
+ * IRQs where the VM can deactivate the virtual and physical IRQ together,
+ * because they are linked in the LR.
+ *
+ * Some device drivers, like the architected timer driver for KVM, needs to
+ * synchronize hardware and virtual state of the IRQ for a number of reasons.
+ *
+ * This function returns true if the specified IRQ is active.  It is assumed
+ * that the caller has already ensured that the interrupt is mapped (irq->hw
+ * is true).
+ *
+ * return true if the IRQ is active.
+ */
 bool kvm_vgic_map_is_active(struct kvm_vcpu *vcpu, unsigned int virt_irq)
 {
 	struct vgic_irq *irq;
@@ -814,18 +832,20 @@ bool kvm_vgic_map_is_active(struct kvm_vcpu *vcpu, unsigned int virt_irq)
 	if (!vgic_initialized(vcpu->kvm))
 		return false;
 
-	DEBUG_SPINLOCK_BUG_ON(!irqs_disabled());
-
-	if (vgic_get_irq_lr_state(vcpu, virt_irq, &active, NULL))
-		return active;
-
 	irq = vgic_get_irq(vcpu->kvm, vcpu, virt_irq);
 
-	spin_lock(&irq->irq_lock);
-	active = irq->hw && irq->active;
-	spin_unlock(&irq->irq_lock);
-	vgic_put_irq(vcpu->kvm, irq);
+	if (virt_irq >= VGIC_NR_PRIVATE_IRQS) {
+		unsigned long flags;
+		spin_lock_irqsave(&irq->irq_lock, flags);
+		vcpu = vgic_target_oracle(irq);
+		spin_unlock_irqrestore(&irq->irq_lock, flags);
+	}
 
+	if (vcpu && vgic_get_irq_lr_state(vcpu, virt_irq, &active, NULL))
+		goto out;
+
+	active = irq->active;
+out:
+	vgic_put_irq(vcpu->kvm, irq);
 	return active;
 }
-
