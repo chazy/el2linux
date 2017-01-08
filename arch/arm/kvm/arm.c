@@ -627,8 +627,8 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		if (ret <= 0 || need_new_vmid_gen(vcpu->kvm) ||
 			vcpu->arch.power_off || vcpu->arch.pause) {
 			kvm_timer_sync_hwstate(vcpu);
-			local_irq_enable();
 			kvm_vgic_sync_hwstate(vcpu);
+			local_irq_enable();
 			preempt_enable();
 			continue;
 		}
@@ -658,10 +658,21 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		/*
 		 * Sync timer state before enabling interrupts as the sync
 		 * must not collide with a timer interrupt.
+		 *
+		 * We must sync the timer state before the vgic state so that
+		 * the vgic can properly sample the updated state of the
+		 * interrupt line.
 		 */
 		kvm_timer_sync_hwstate(vcpu);
 
 		guest_exit_irqoff();
+
+		/*
+		 * Sync the VGIC state before enabling interrupts to avoid
+		 * actually running the maintenance handler which adds
+		 * overhead.
+		 */
+		kvm_vgic_sync_hwstate(vcpu);
 
 		/*
 		 * We may have taken a host interrupt in HYP mode (ie
@@ -677,12 +688,6 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 
 		trace_kvm_exit(ret, kvm_vcpu_trap_get_class(vcpu), *vcpu_pc(vcpu));
 
-		/*
-		 * We must sync the timer state before the vgic state so that
-		 * the vgic can properly sample the updated state of the
-		 * interrupt line.
-		 */
-		kvm_vgic_sync_hwstate(vcpu);
 
 		preempt_enable();
 
