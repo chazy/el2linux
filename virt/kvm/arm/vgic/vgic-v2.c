@@ -79,7 +79,6 @@ void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu, int used_lrs)
 {
 	struct vgic_v2_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v2;
 	int lr;
-	unsigned long flags;
 
 	for (lr = 0; lr < used_lrs; lr++) {
 		u32 val = cpuif->vgic_lr[lr];
@@ -93,7 +92,7 @@ void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu, int used_lrs)
 
 		irq = vgic_get_irq(vcpu->kvm, vcpu, intid);
 
-		spin_lock_irqsave(&irq->irq_lock, flags);
+		spin_lock(&irq->irq_lock);
 
 		/* Always preserve the active bit */
 		irq->active = !!(val & GICH_LR_ACTIVE_BIT);
@@ -122,7 +121,7 @@ void vgic_v2_fold_lr_state(struct kvm_vcpu *vcpu, int used_lrs)
 			irq->pending = irq->line_level || irq->soft_pending;
 		}
 
-		spin_unlock_irqrestore(&irq->irq_lock, flags);
+		spin_unlock(&irq->irq_lock);
 		vgic_put_irq(vcpu->kvm, irq);
 	}
 }

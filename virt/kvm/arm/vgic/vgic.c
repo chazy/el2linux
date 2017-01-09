@@ -485,10 +485,9 @@ static void vgic_prune_ap_list(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_irq *irq, *tmp;
-	unsigned long flags;
 
 retry:
-	spin_lock_irqsave(&vgic_cpu->ap_list_lock, flags);
+	spin_lock(&vgic_cpu->ap_list_lock);
 
 	list_for_each_entry_safe(irq, tmp, &vgic_cpu->ap_list_head, ap_list) {
 		struct kvm_vcpu *target_vcpu, *vcpuA, *vcpuB;
@@ -528,7 +527,7 @@ retry:
 		/* This interrupt looks like it has to be migrated. */
 
 		spin_unlock(&irq->irq_lock);
-		spin_unlock_irqrestore(&vgic_cpu->ap_list_lock, flags);
+		spin_unlock(&vgic_cpu->ap_list_lock);
 
 		/*
 		 * Ensure locking order by always locking the smallest
@@ -542,7 +541,7 @@ retry:
 			vcpuB = vcpu;
 		}
 
-		spin_lock_irqsave(&vcpuA->arch.vgic_cpu.ap_list_lock, flags);
+		spin_lock(&vcpuA->arch.vgic_cpu.ap_list_lock);
 		spin_lock_nested(&vcpuB->arch.vgic_cpu.ap_list_lock,
 				 SINGLE_DEPTH_NESTING);
 		spin_lock(&irq->irq_lock);
@@ -566,11 +565,11 @@ retry:
 
 		spin_unlock(&irq->irq_lock);
 		spin_unlock(&vcpuB->arch.vgic_cpu.ap_list_lock);
-		spin_unlock_irqrestore(&vcpuA->arch.vgic_cpu.ap_list_lock, flags);
+		spin_unlock(&vcpuA->arch.vgic_cpu.ap_list_lock);
 		goto retry;
 	}
 
-	spin_unlock_irqrestore(&vgic_cpu->ap_list_lock, flags);
+	spin_unlock(&vgic_cpu->ap_list_lock);
 }
 
 static inline void vgic_clear_uie(struct kvm_vcpu *vcpu)
@@ -693,15 +692,14 @@ void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	u64 used_lrs;
-	unsigned long flags;
 
 	/*
 	 * Ensure that vgic_v2_deliver_virq_now ony injects LRs before the
 	 * receiving PCPU runs this sync function.  See comment on
 	 * vgic_v2_deliver_virq_now for more information.
 	 */
-	spin_lock_irqsave(&vgic_cpu->ap_list_lock, flags);
-	spin_unlock_irqrestore(&vgic_cpu->ap_list_lock, flags);
+	spin_lock(&vgic_cpu->ap_list_lock);
+	spin_unlock(&vgic_cpu->ap_list_lock);
 
 	used_lrs = READ_ONCE(vcpu->arch.vgic_cpu.used_lrs);
 
