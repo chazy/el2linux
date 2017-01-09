@@ -489,6 +489,7 @@ retry:
 
 	list_for_each_entry_safe(irq, tmp, &vgic_cpu->ap_list_head, ap_list) {
 		struct kvm_vcpu *target_vcpu, *vcpuA, *vcpuB;
+		bool migrated_to_target = false;
 
 		spin_lock(&irq->irq_lock);
 
@@ -559,11 +560,16 @@ retry:
 			list_del(&irq->ap_list);
 			irq->vcpu = target_vcpu;
 			list_add_tail(&irq->ap_list, &new_cpu->ap_list_head);
+			migrated_to_target = true;
 		}
 
 		spin_unlock(&irq->irq_lock);
 		spin_unlock(&vcpuB->arch.vgic_cpu.ap_list_lock);
 		spin_unlock(&vcpuA->arch.vgic_cpu.ap_list_lock);
+
+		if (migrated_to_target)
+			kvm_vcpu_kick(target_vcpu);
+
 		goto retry;
 	}
 
