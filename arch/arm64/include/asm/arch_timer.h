@@ -30,6 +30,8 @@
 
 #include <clocksource/arm_arch_timer.h>
 
+extern struct static_key_false arch_timer_phys_counter_available;
+
 #if IS_ENABLED(CONFIG_ARM_ARCH_TIMER_OOL_WORKAROUND)
 extern struct static_key_false arch_timer_read_ool_enabled;
 #define needs_unstable_timer_counter_workaround() \
@@ -52,6 +54,7 @@ struct arch_timer_erratum_workaround {
 	const char *desc;
 	u32 (*read_cntp_tval_el0)(void);
 	u32 (*read_cntv_tval_el0)(void);
+	u64 (*read_cntpct_el0)(void);
 	u64 (*read_cntvct_el0)(void);
 	int (*set_next_event_phys)(unsigned long, struct clock_event_device *);
 	int (*set_next_event_virt)(unsigned long, struct clock_event_device *);
@@ -148,16 +151,22 @@ static inline void arch_timer_set_cntkctl(u32 cntkctl)
 
 static inline u64 arch_counter_get_cntpct(void)
 {
-	u64 cval;
 	isb();
-	asm volatile("mrs %0, cntpct_el0" : "=r" (cval));
-	return cval;
+	return arch_timer_reg_read_stable(cntpct_el0);
 }
 
 static inline u64 arch_counter_get_cntvct(void)
 {
 	isb();
 	return arch_timer_reg_read_stable(cntvct_el0);
+}
+
+static inline u64 arch_counter_get_cycles(void)
+{
+	if (static_branch_unlikely(&arch_timer_phys_counter_available))
+	    return arch_counter_get_cntpct();
+	else
+	    return arch_counter_get_cntvct();
 }
 
 static inline int arch_timer_arch_init(void)
