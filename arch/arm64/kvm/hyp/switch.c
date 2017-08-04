@@ -23,22 +23,25 @@
 #include <asm/kvm_hyp.h>
 #include <asm/fpsimd.h>
 
-static void __hyp_text __activate_traps_common(struct kvm_vcpu *vcpu)
+static void __hyp_text __activate_traps_fpsimd32(struct kvm_vcpu *vcpu)
 {
 	/*
-	 * We are about to set CPTR_EL2.TFP to trap all floating point
-	 * register accesses to EL2, however, the ARM ARM clearly states that
-	 * traps are only taken to EL2 if the operation would not otherwise
-	 * trap to EL1.  Therefore, always make sure that for 32-bit guests,
-	 * we set FPEXC.EN to prevent traps to EL1, when setting the TFP bit.
-	 * If FP/ASIMD is not implemented, FPEXC is UNDEFINED and any access to
-	 * it will cause an exception.
+	 * We are about to trap all floating point register accesses to EL2,
+	 * however, traps are only taken to EL2 if the operation would not
+	 * otherwise trap to EL1.  Therefore, always make sure that for 32-bit
+	 * guests, we set FPEXC.EN to prevent traps to EL1, when setting the
+	 * TFP bit.  If FP/ASIMD is not implemented, FPEXC is UNDEFINED and
+	 * any access to it will cause an exception.
 	 */
 	if (vcpu_el1_is_32bit(vcpu) && system_supports_fpsimd() &&
 	    !vcpu->arch.guest_vfp_loaded) {
 		write_sysreg(1 << 30, fpexc32_el2);
 		isb();
 	}
+}
+
+static void __hyp_text __activate_traps_common(struct kvm_vcpu *vcpu)
+{
 	write_sysreg(vcpu->arch.hcr_el2, hcr_el2);
 
 	/* Trap on AArch32 cp15 c15 (impdef sysregs) accesses (EL1 or EL0) */
@@ -60,9 +63,11 @@ static void __hyp_text __deactivate_traps_common(void)
 	write_sysreg(0, pmuserenr_el0);
 }
 
-static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
+void activate_traps_vhe_load(struct kvm_vcpu *vcpu)
 {
 	u64 val;
+
+	__activate_traps_fpsimd32(vcpu);
 
 	val = read_sysreg(cpacr_el1);
 	val |= CPACR_EL1_TTA;
@@ -71,13 +76,23 @@ static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
 	else
 		val &= ~CPACR_EL1_FPEN;
 	write_sysreg(val, cpacr_el1);
+}
 
+void deactivate_traps_vhe_put(void)
+{
+	write_sysreg(CPACR_EL1_FPEN, cpacr_el1);
+}
+
+static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
+{
 	write_sysreg(__kvm_hyp_vector, vbar_el1);
 }
 
 static void __hyp_text __activate_traps_nvhe(struct kvm_vcpu *vcpu)
 {
 	u64 val;
+
+	__activate_traps_fpsimd32(vcpu);
 
 	val = CPTR_EL2_DEFAULT;
 	val |= CPTR_EL2_TTA;
@@ -109,7 +124,6 @@ static void __hyp_text __deactivate_traps_vhe(void)
 
 	write_sysreg(mdcr_el2, mdcr_el2);
 	write_sysreg(HCR_HOST_VHE_FLAGS, hcr_el2);
-	write_sysreg(CPACR_EL1_FPEN, cpacr_el1);
 	write_sysreg(vectors, vbar_el1);
 }
 
