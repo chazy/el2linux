@@ -348,6 +348,8 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 		__sysreg32_restore_cp_state(vcpu);
 
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = true;
+
+	activate_traps_vhe_load(vcpu);
 }
 
 /**
@@ -377,6 +379,8 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 
 	if (!is_kernel_in_hyp_mode() || !vcpu->arch.ctxt.sysregs_loaded_on_cpu)
 		return;
+
+	deactivate_traps_vhe_put();
 
 	/* Save guest EL1 and user state */
 	__sysreg_save_el1_state(guest_ctxt);
