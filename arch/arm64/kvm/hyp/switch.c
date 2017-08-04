@@ -175,13 +175,13 @@ static void __hyp_text __deactivate_traps(struct kvm_vcpu *vcpu)
 	__deactivate_traps_arch()();
 }
 
-static void __hyp_text __activate_vm(struct kvm_vcpu *vcpu)
+static inline void __hyp_text __activate_vm(struct kvm_vcpu *vcpu)
 {
 	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
 	write_sysreg(kvm->arch.vttbr, vttbr_el2);
 }
 
-static void __hyp_text __deactivate_vm(struct kvm_vcpu *vcpu)
+static inline void __hyp_text __deactivate_vm(void)
 {
 	write_sysreg(0, vttbr_el2);
 }
@@ -313,7 +313,8 @@ int __hyp_text __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	__debug_cond_save_host_state(vcpu);
 
 	__activate_traps(vcpu);
-	__activate_vm(vcpu);
+	if (!has_vhe())
+		__activate_vm(vcpu);
 
 	__vgic_restore_state(vcpu);
 	__timer_enable_traps(vcpu);
@@ -388,7 +389,8 @@ again:
 	__vgic_save_state(vcpu);
 
 	__deactivate_traps(vcpu);
-	__deactivate_vm(vcpu);
+	if (!has_vhe())
+		__deactivate_vm();
 
 	__sysreg_restore_host_state(host_ctxt);
 
@@ -450,7 +452,7 @@ void __hyp_text __noreturn hyp_panic(struct kvm_cpu_context *__host_ctxt)
 		vcpu = host_ctxt->__hyp_running_vcpu;
 		__timer_disable_traps(vcpu);
 		__deactivate_traps(vcpu);
-		__deactivate_vm(vcpu);
+		__deactivate_vm();
 		__sysreg_restore_host_state(host_ctxt);
 	}
 

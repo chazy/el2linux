@@ -510,6 +510,9 @@ static void update_vttbr(struct kvm *kvm)
 	vmid = ((u64)(kvm->arch.vmid) << VTTBR_VMID_SHIFT) & VTTBR_VMID_MASK(kvm_vmid_bits);
 	kvm->arch.vttbr = pgd_phys | vmid;
 
+	if (has_vhe())
+		write_sysreg(kvm->arch.vttbr, vttbr_el2);
+
 	spin_unlock(&kvm_vmid_lock);
 }
 

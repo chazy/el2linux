@@ -350,6 +350,7 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = true;
 
 	activate_traps_vhe_load(vcpu);
+	write_sysreg(vcpu->kvm->arch.vttbr, vttbr_el2);
 }
 
 /**
@@ -381,6 +382,7 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 		return;
 
 	deactivate_traps_vhe_put();
+	write_sysreg(0, vttbr_el2);
 
 	/* Save guest EL1 and user state */
 	__sysreg_save_el1_state(guest_ctxt);
