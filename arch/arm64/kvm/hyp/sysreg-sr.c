@@ -309,6 +309,8 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 	__sysreg_restore_el1_state(guest_ctxt);
 
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = true;
+
+	activate_traps_vhe_load(vcpu);
 }
 
 /**
@@ -339,8 +341,7 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 	if (!has_vhe())
 		return;
 
-	host_ctxt = vcpu->arch.host_cpu_context;
-	guest_ctxt = &vcpu->arch.ctxt;
+	deactivate_traps_vhe_put();
 
 	__sysreg_save_el1_state(guest_ctxt);
 	__sysreg_save_user_state(guest_ctxt);
