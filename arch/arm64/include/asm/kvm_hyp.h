@@ -153,8 +153,11 @@ void __fpsimd_save_state(struct user_fpsimd_state *fp_regs);
 void __fpsimd_restore_state(struct user_fpsimd_state *fp_regs);
 bool __fpsimd_enabled(void);
 
-void __activate_traps_vhe_fpsimd(struct kvm_vcpu *vcpu);
-void __deactivate_traps_vhe_fpsimd(void);
+void activate_traps_vhe_fpsimd(struct kvm_vcpu *vcpu);
+void deactivate_traps_vhe_fpsimd(void);
+
+void activate_traps_vhe(struct kvm_vcpu *vcpu);
+void deactivate_traps_vhe(void);
 
 u64 __guest_enter(struct kvm_vcpu *vcpu, struct kvm_cpu_context *host_ctxt);
 void __noreturn __hyp_do_panic(unsigned long, ...);

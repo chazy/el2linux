@@ -351,7 +351,8 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = true;
 
-	__activate_traps_vhe_fpsimd(vcpu);
+	activate_traps_vhe_fpsimd(vcpu);
+	activate_traps_vhe(vcpu);
 }
 
 /**
@@ -382,7 +383,8 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 	if (!is_kernel_in_hyp_mode() || !vcpu->arch.ctxt.sysregs_loaded_on_cpu)
 		return;
 
-	__deactivate_traps_vhe_fpsimd();
+	deactivate_traps_vhe_fpsimd();
+	deactivate_traps_vhe();
 
 	/* Save guest EL1 and user state */
 	__sysreg_save_el1_state(guest_ctxt);
