@@ -381,8 +381,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 
 	activate_traps_vhe(vcpu);
 
-	__timer_enable_traps(vcpu);
-
 	sysreg_restore_common_state_vhe(guest_ctxt);
 
 	/* Jump in the fire! */
@@ -394,7 +392,6 @@ again:
 		goto again;
 
 	sysreg_save_common_state_vhe(guest_ctxt);
-	__timer_disable_traps(vcpu);
 
 	deactivate_traps_vhe(vcpu);
 
