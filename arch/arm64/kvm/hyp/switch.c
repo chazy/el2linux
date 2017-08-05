@@ -59,24 +59,6 @@ static void __hyp_text __activate_traps_common(struct kvm_vcpu *vcpu)
 }
 
 
-static void __hyp_text __activate_traps_fpsimd32(struct kvm_vcpu *vcpu)
-{
-	/*
-	 * We are about to set CPTR_EL2.TFP to trap all floating point
-	 * register accesses to EL2, however, the ARM ARM clearly states that
-	 * traps are only taken to EL2 if the operation would not otherwise
-	 * trap to EL1.  Therefore, always make sure that for 32-bit guests,
-	 * we set FPEXC.EN to prevent traps to EL1, when setting the TFP bit.
-	 * If FP/ASIMD is not implemented, FPEXC is UNDEFINED and any access to
-	 * it will cause an exception.
-	 */
-	if (!(vcpu->arch.hcr_el2 & HCR_RW) && system_supports_fpsimd() &&
-	    !vcpu->arch.guest_vfp_loaded) {
-		write_sysreg(1 << 30, fpexc32_el2);
-		isb();
-	}
-}
-
 void activate_traps_vhe(struct kvm_vcpu *vcpu)
 {
 	__activate_traps_common(vcpu);
@@ -97,8 +79,27 @@ void activate_traps_vhe_fpsimd(struct kvm_vcpu *vcpu)
 	write_sysreg(val, cpacr_el1);
 }
 
+static void __hyp_text __activate_traps_fpsimd32(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * We are about to set CPTR_EL2.TFP to trap all floating point
+	 * register accesses to EL2, however, the ARM ARM clearly states that
+	 * traps are only taken to EL2 if the operation would not otherwise
+	 * trap to EL1.  Therefore, always make sure that for 32-bit guests,
+	 * we set FPEXC.EN to prevent traps to EL1, when setting the TFP bit.
+	 * If FP/ASIMD is not implemented, FPEXC is UNDEFINED and any access to
+	 * it will cause an exception.
+	 */
+	if (!(vcpu->arch.hcr_el2 & HCR_RW) && system_supports_fpsimd() &&
+	    !vcpu->arch.guest_vfp_loaded) {
+		write_sysreg(1 << 30, fpexc32_el2);
+		isb();
+	}
+}
+
 static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
 {
+	__activate_traps_common();
 	write_sysreg(__kvm_hyp_vector, vbar_el1);
 }
 
@@ -119,25 +120,24 @@ static void __hyp_text __activate_traps_nvhe(struct kvm_vcpu *vcpu)
 	write_sysreg(val, cptr_el2);
 }
 
-static hyp_alternate_select(__activate_traps_arch,
-			    __activate_traps_nvhe, __activate_traps_vhe,
-			    ARM64_HAS_VIRT_HOST_EXTN);
-
-static void __hyp_text __activate_traps(struct kvm_vcpu *vcpu)
+void __hyp_text deactivate_traps_vhe_fpsimd(void)
 {
-	__activate_traps_arch()(vcpu);
-	write_sysreg(vcpu->arch.hcr_el2, hcr_el2);
+	write_sysreg(CPACR_EL1_FPEN, cpacr_el1);
 }
 
 static void __hyp_text __deactivate_traps_common(void)
 {
+	/*
+	 * If we pended a virtual abort, preserve it until it gets
+	 * cleared. See D1.14.3 (Virtual Interrupts) for details, but
+	 * the crucial bit is "On taking a vSError interrupt,
+	 * HCR_EL2.VSE is cleared to 0."
+	 */
+	if (vcpu->arch.hcr_el2 & HCR_VSE)
+		vcpu->arch.hcr_el2 = read_sysreg(hcr_el2);
+
 	write_sysreg(0, hstr_el2);
 	write_sysreg(0, pmuserenr_el0);
-}
-
-void __hyp_text deactivate_traps_vhe_fpsimd(void)
-{
-	write_sysreg(CPACR_EL1_FPEN, cpacr_el1);
 }
 
 void __hyp_text deactivate_traps_vhe(void)
@@ -156,6 +156,8 @@ static void __hyp_text __deactivate_traps_vhe(void)
 {
 	extern char vectors[];	/* kernel exception vectors */
 
+	__deactivate_traps_common();
+
 	write_sysreg(HCR_HOST_VHE_FLAGS, hcr_el2);
 	write_sysreg(vectors, vbar_el1);
 }
@@ -164,31 +166,14 @@ static void __hyp_text __deactivate_traps_nvhe(void)
 {
 	u64 mdcr_el2 = read_sysreg(mdcr_el2);
 
+	__deactivate_traps_common();
+
 	mdcr_el2 &= MDCR_EL2_HPMN_MASK;
 	mdcr_el2 |= MDCR_EL2_E2PB_MASK << MDCR_EL2_E2PB_SHIFT;
 
 	write_sysreg(mdcr_el2, mdcr_el2);
 	write_sysreg(HCR_RW, hcr_el2);
 	write_sysreg(CPTR_EL2_DEFAULT, cptr_el2);
-}
-
-static hyp_alternate_select(__deactivate_traps_arch,
-			    __deactivate_traps_nvhe, __deactivate_traps_vhe,
-			    ARM64_HAS_VIRT_HOST_EXTN);
-
-static void __hyp_text __deactivate_traps(struct kvm_vcpu *vcpu)
-{
-	/*
-	 * If we pended a virtual abort, preserve it until it gets
-	 * cleared. See D1.14.3 (Virtual Interrupts) for details, but
-	 * the crucial bit is "On taking a vSError interrupt,
-	 * HCR_EL2.VSE is cleared to 0."
-	 */
-	if (vcpu->arch.hcr_el2 & HCR_VSE)
-		vcpu->arch.hcr_el2 = read_sysreg(hcr_el2);
-
-	__deactivate_traps_common();
-	__deactivate_traps_arch()();
 }
 
 static inline void __hyp_text __activate_vm(struct kvm_vcpu *vcpu)
@@ -394,7 +379,7 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 
 	__sysreg_save_common_state(host_ctxt);
 
-	__activate_traps(vcpu);
+	__activate_traps_vhe(vcpu);
 
 	__sysreg_restore_guest_state(guest_ctxt);
 
@@ -411,7 +396,7 @@ again:
 	/* TODO: Move timer restore to timer code - only look at the timer once */
 	__timer_disable_traps(vcpu);
 
-	__deactivate_traps(vcpu);
+	__deactivate_traps_vhe(vcpu);
 
 	__sysreg_restore_common_state(host_ctxt);
 
@@ -432,7 +417,7 @@ int __hyp_text __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 
 	__sysreg_save_host_state(host_ctxt);
 
-	__activate_traps(vcpu);
+	__activate_traps_nvhe(vcpu);
 	__activate_vm(vcpu);
 
 	__vgic_restore_state(vcpu);
@@ -463,7 +448,7 @@ again:
 	__timer_disable_traps(vcpu);
 	__vgic_save_state(vcpu);
 
-	__deactivate_traps(vcpu);
+	__deactivate_traps_nvhe(vcpu);
 	__deactivate_vm();
 
 	__sysreg_restore_host_state(host_ctxt);
