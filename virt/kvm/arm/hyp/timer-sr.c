@@ -53,16 +53,10 @@ void __hyp_text disable_el1_phys_timer_access(void)
 
 void __hyp_text __timer_disable_traps(struct kvm_vcpu *vcpu)
 {
-	/*
-	 * We don't need to do this for VHE since the host kernel runs in EL2
-	 * with HCR_EL2.TGE ==1, which makes those bits have no impact.
-	 */
-	if (!has_vhe())
-		enable_el1_phys_timer_access();
+	enable_el1_phys_timer_access();
 }
 
 void __hyp_text __timer_enable_traps(struct kvm_vcpu *vcpu)
 {
-	if (!has_vhe())
-		disable_el1_phys_timer_access();
+	disable_el1_phys_timer_access();
 }
