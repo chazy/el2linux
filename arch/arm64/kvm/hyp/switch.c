@@ -380,6 +380,9 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 
 	sysreg_save_common_state_vhe(host_ctxt);
 
+	/* Make sure we're using the latest VMID for this VM */
+	write_sysreg(vcpu->kvm->arch.vttbr, vttbr_el2);
+
 	__activate_traps(vcpu);
 
 	__timer_enable_traps(vcpu);
