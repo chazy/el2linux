@@ -386,6 +386,9 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	host_ctxt = kern_hyp_va(vcpu->arch.host_cpu_context);
 	guest_ctxt = &vcpu->arch.ctxt;
 
+	/* make sure we're using the latest VMID for this VM */
+	write_sysreg(kvm->arch.vttbr, vttbr_el2);
+
 	/* TODO: Move timer restore to timer code - only look at the timer once */
 	__timer_enable_traps(vcpu);
 
