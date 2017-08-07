@@ -204,7 +204,7 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu)
 	trace_kvm_arm_set_dreg32("MDSCR_EL1",
 				 vcpu_get_sys_reg(vcpu, MDSCR_EL1));
 
-	if (!kvm_runs_in_hyp())
+	if (!has_vhe())
 		return;
 
 	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY) {
