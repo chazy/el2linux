@@ -219,7 +219,7 @@ void kvm_arm_clear_debug(struct kvm_vcpu *vcpu)
 {
 	trace_kvm_arm_clear_debug(vcpu->guest_debug);
 
-	if (kvm_runs_in_hyp() &&
+	if (has_vhe() &&
 	    (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)) {
 		__debug_save_state(vcpu, vcpu->arch.debug_ptr,
 				   &vcpu->arch.ctxt);
