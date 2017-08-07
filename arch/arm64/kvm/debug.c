@@ -208,9 +208,9 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu)
 		return;
 
 	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY) {
-		__debug_save_state(vcpu, &vcpu->arch.host_debug_state,
+		__debug_save_state(vcpu, &vcpu->arch.host_debug_state.regs,
 				   vcpu->arch.host_cpu_context);
-		__debug_restore_state(vcpu, vcpu->arch.debug_ptr, 
+		__debug_restore_state(vcpu, vcpu->arch.debug_ptr,
 				      &vcpu->arch.ctxt);
 	}
 }
@@ -223,7 +223,7 @@ void kvm_arm_clear_debug(struct kvm_vcpu *vcpu)
 	    (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)) {
 		__debug_save_state(vcpu, vcpu->arch.debug_ptr,
 				   &vcpu->arch.ctxt);
-		__debug_restore_state(vcpu, &vcpu->arch.host_debug_state,
+		__debug_restore_state(vcpu, &vcpu->arch.host_debug_state.regs,
 				      vcpu->arch.host_cpu_context);
 
 		/*
