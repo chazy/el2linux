@@ -372,7 +372,7 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	guest_ctxt = &vcpu->arch.ctxt;
 
 	/* make sure we're using the latest VMID for this VM */
-	write_sysreg(kvm->arch.vttbr, vttbr_el2);
+	write_sysreg(vcpu->kvm->arch.vttbr, vttbr_el2);
 
 	/* switch sp_el0 */
 	host_ctxt->gp_regs.regs.sp = read_sysreg(sp_el0);
