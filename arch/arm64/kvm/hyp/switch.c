@@ -64,21 +64,6 @@ void activate_traps_vhe(struct kvm_vcpu *vcpu)
 	__activate_traps_common(vcpu);
 }
 
-void activate_traps_vhe_fpsimd(struct kvm_vcpu *vcpu)
-{
-	u64 val;
-
-	__activate_traps_fpsimd32(vcpu);
-
-	val = read_sysreg(cpacr_el1);
-	val |= CPACR_EL1_TTA;
-	if (vcpu->arch.guest_vfp_loaded)
-		val |= CPACR_EL1_FPEN;
-	else
-		val &= ~CPACR_EL1_FPEN;
-	write_sysreg(val, cpacr_el1);
-}
-
 static void __hyp_text __activate_traps_fpsimd32(struct kvm_vcpu *vcpu)
 {
 	/*
@@ -95,6 +80,21 @@ static void __hyp_text __activate_traps_fpsimd32(struct kvm_vcpu *vcpu)
 		write_sysreg(1 << 30, fpexc32_el2);
 		isb();
 	}
+}
+
+void activate_traps_vhe_fpsimd(struct kvm_vcpu *vcpu)
+{
+	u64 val;
+
+	__activate_traps_fpsimd32(vcpu);
+
+	val = read_sysreg(cpacr_el1);
+	val |= CPACR_EL1_TTA;
+	if (vcpu->arch.guest_vfp_loaded)
+		val |= CPACR_EL1_FPEN;
+	else
+		val &= ~CPACR_EL1_FPEN;
+	write_sysreg(val, cpacr_el1);
 }
 
 static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
