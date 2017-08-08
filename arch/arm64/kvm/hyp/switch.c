@@ -518,7 +518,10 @@ void __hyp_text __noreturn __hyp_panic(void)
 		vcpu = (struct kvm_vcpu *)read_sysreg(tpidr_el2);
 		host_ctxt = kern_hyp_va(vcpu->arch.host_cpu_context);
 		__timer_disable_traps(vcpu);
-		__deactivate_traps(vcpu);
+		if (has_vhe())
+			__deactivate_traps_vhe(vcpu);
+		else
+			__deactivate_traps_nvhe(vcpu);
 		__deactivate_vm();
 		__sysreg_restore_host_state(host_ctxt);
 	}
