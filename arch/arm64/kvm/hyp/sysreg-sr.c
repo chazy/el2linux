@@ -370,7 +370,7 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 		return;
 
 	deactivate_traps_vhe_fpsimd();
-	deactivate_traps_vhe();
+	deactivate_traps_vhe(vcpu);
 	write_sysreg(0, vttbr_el2);
 
 	/* Save guest EL1 and user state */

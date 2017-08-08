@@ -162,7 +162,7 @@ void activate_traps_vhe_fpsimd(struct kvm_vcpu *vcpu);
 void deactivate_traps_vhe_fpsimd(void);
 
 void activate_traps_vhe(struct kvm_vcpu *vcpu);
-void deactivate_traps_vhe(void);
+void deactivate_traps_vhe(struct kvm_vcpu *vcpu);
 
 u64 __guest_enter(struct kvm_vcpu *vcpu, struct kvm_cpu_context *host_ctxt);
 void __noreturn __hyp_do_panic(unsigned long, ...);

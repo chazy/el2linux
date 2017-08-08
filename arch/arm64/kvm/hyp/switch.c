@@ -99,7 +99,7 @@ void activate_traps_vhe_fpsimd(struct kvm_vcpu *vcpu)
 
 static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
 {
-	__activate_traps_common();
+	__activate_traps_common(vcpu);
 	write_sysreg(__kvm_hyp_vector, vbar_el1);
 }
 
@@ -125,7 +125,7 @@ void __hyp_text deactivate_traps_vhe_fpsimd(void)
 	write_sysreg(CPACR_EL1_FPEN, cpacr_el1);
 }
 
-static void __hyp_text __deactivate_traps_common(void)
+static void __hyp_text __deactivate_traps_common(struct kvm_vcpu *vcpu)
 {
 	/*
 	 * If we pended a virtual abort, preserve it until it gets
@@ -140,11 +140,11 @@ static void __hyp_text __deactivate_traps_common(void)
 	write_sysreg(0, pmuserenr_el0);
 }
 
-void __hyp_text deactivate_traps_vhe(void)
+void __hyp_text deactivate_traps_vhe(struct kvm_vcpu *vcpu)
 {
 	u64 mdcr_el2;
 
-	__deactivate_traps_common();
+	__deactivate_traps_common(vcpu);
 	mdcr_el2 = read_sysreg(mdcr_el2);
 	mdcr_el2 &= MDCR_EL2_HPMN_MASK |
 		    MDCR_EL2_E2PB_MASK << MDCR_EL2_E2PB_SHIFT |
@@ -152,21 +152,21 @@ void __hyp_text deactivate_traps_vhe(void)
 	write_sysreg(mdcr_el2, mdcr_el2);
 }
 
-static void __hyp_text __deactivate_traps_vhe(void)
+static void __hyp_text __deactivate_traps_vhe(struct kvm_vcpu *vcpu)
 {
 	extern char vectors[];	/* kernel exception vectors */
 
-	__deactivate_traps_common();
+	__deactivate_traps_common(vcpu);
 
 	write_sysreg(HCR_HOST_VHE_FLAGS, hcr_el2);
 	write_sysreg(vectors, vbar_el1);
 }
 
-static void __hyp_text __deactivate_traps_nvhe(void)
+static void __hyp_text __deactivate_traps_nvhe(struct kvm_vcpu *vcpu)
 {
 	u64 mdcr_el2 = read_sysreg(mdcr_el2);
 
-	__deactivate_traps_common();
+	__deactivate_traps_common(vcpu);
 
 	mdcr_el2 &= MDCR_EL2_HPMN_MASK;
 	mdcr_el2 |= MDCR_EL2_E2PB_MASK << MDCR_EL2_E2PB_SHIFT;
