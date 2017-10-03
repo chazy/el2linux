@@ -378,7 +378,7 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	host_ctxt = kern_hyp_va(vcpu->arch.host_cpu_context);
 	guest_ctxt = &vcpu->arch.ctxt;
 
-	__sysreg_save_host_state(host_ctxt);
+	sysreg_save_common_state_vhe(host_ctxt);
 
 	__activate_traps(vcpu);
 
@@ -390,7 +390,7 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	 * to erratum #852523 (Cortex-A57) or #853709 (Cortex-A72).
 	 */
 	__sysreg32_restore_state(vcpu);
-	__sysreg_restore_guest_state(guest_ctxt);
+	sysreg_restore_common_state_vhe(guest_ctxt);
 	if (__is_debug_dirty(vcpu)) {
 		__debug_cond_save_host_state(vcpu);
 		__debug_restore_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr),
@@ -405,14 +405,14 @@ again:
 	if (fixup_guest_exit(vcpu, &exit_code))
 		goto again;
 
-	__sysreg_save_guest_state(guest_ctxt);
+	sysreg_save_common_state_vhe(guest_ctxt);
 	__sysreg32_save_state(vcpu);
 	__timer_disable_traps(vcpu);
 	__vgic_save_state(vcpu);
 
 	__deactivate_traps(vcpu);
 
-	__sysreg_restore_host_state(host_ctxt);
+	sysreg_restore_common_state_vhe(host_ctxt);
 
 	if (__is_debug_dirty(vcpu)) {
 		__debug_save_state(vcpu, kern_hyp_va(vcpu->arch.debug_ptr),
