@@ -369,14 +369,14 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	host_ctxt->__hyp_running_vcpu = vcpu;
 	guest_ctxt = &vcpu->arch.ctxt;
 
-	__sysreg_save_host_state(host_ctxt);
+	sysreg_save_common_state_vhe(host_ctxt);
 
 	__activate_traps(vcpu);
 	__activate_vm(vcpu);
 
 	__vgic_restore_state(vcpu);
 
-	__sysreg_restore_guest_state(guest_ctxt);
+	sysreg_restore_common_state_vhe(guest_ctxt);
 	__debug_switch_to_guest(vcpu);
 
 	/* Jump in the fire! */
@@ -387,12 +387,12 @@ again:
 	if (fixup_guest_exit(vcpu, &exit_code))
 		goto again;
 
-	__sysreg_save_guest_state(guest_ctxt);
+	sysreg_save_common_state_vhe(guest_ctxt);
 	__vgic_save_state(vcpu);
 
 	__deactivate_traps(vcpu);
 
-	__sysreg_restore_host_state(host_ctxt);
+	sysreg_restore_common_state_vhe(host_ctxt);
 
 	/*
 	 * This must come after restoring the host sysregs, since a non-VHE
@@ -496,7 +496,7 @@ static void __hyp_call_panic_vhe(u64 spsr, u64 elr, u64 par,
 	vcpu = host_ctxt->__hyp_running_vcpu;
 
 	__deactivate_traps_vhe();
-	__sysreg_restore_host_state(host_ctxt);
+	sysreg_restore_common_state_vhe(host_ctxt);
 
 	panic(__hyp_panic_string,
 	      spsr,  elr,
