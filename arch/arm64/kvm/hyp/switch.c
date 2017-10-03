@@ -102,9 +102,27 @@ void deactivate_traps_vhe_put(void)
 	write_sysreg(mdcr_el2, mdcr_el2);
 }
 
-static void __hyp_text __activate_traps_vhe(struct kvm_vcpu *vcpu)
+static inline void activate_traps_vhe(struct kvm_vcpu *vcpu)
 {
-	write_sysreg(__kvm_hyp_vector, vbar_el1);
+	write_sysreg(vcpu->arch.hcr_el2, hcr_el2);
+	write_sysreg_el2(__kvm_hyp_vector, vbar);
+}
+
+static inline void deactivate_traps_vhe(struct kvm_vcpu *vcpu)
+{
+	extern char vectors[];	/* kernel exception vectors */
+
+	/*
+	 * If we pended a virtual abort, preserve it until it gets
+	 * cleared. See D1.14.3 (Virtual Interrupts) for details, but
+	 * the crucial bit is "On taking a vSError interrupt,
+	 * HCR_EL2.VSE is cleared to 0."
+	 */
+	if (vcpu->arch.hcr_el2 & HCR_VSE)
+		vcpu->arch.hcr_el2 = read_sysreg(hcr_el2);
+
+	write_sysreg(HCR_HOST_VHE_FLAGS, hcr_el2);
+	write_sysreg(vectors, vbar_el1);
 }
 
 static void __hyp_text __activate_traps_nvhe(struct kvm_vcpu *vcpu)
@@ -125,44 +143,15 @@ static void __hyp_text __activate_traps_nvhe(struct kvm_vcpu *vcpu)
 	else
 		val |= CPTR_EL2_TFP;
 	write_sysreg(val, cptr_el2);
-}
 
-static hyp_alternate_select(__activate_traps_arch,
-			    __activate_traps_nvhe, __activate_traps_vhe,
-			    ARM64_HAS_VIRT_HOST_EXTN);
-
-static void __hyp_text __activate_traps(struct kvm_vcpu *vcpu)
-{
-	__activate_traps_arch()(vcpu);
+	/* Configure all other hypervisor traps and features */
 	write_sysreg(vcpu->arch.hcr_el2, hcr_el2);
 }
 
-static void __hyp_text __deactivate_traps_vhe(void)
+static void __hyp_text __deactivate_traps_nvhe(struct kvm_vcpu *vcpu)
 {
-	extern char vectors[];	/* kernel exception vectors */
+	u64 mdcr_el2;
 
-	write_sysreg(HCR_HOST_VHE_FLAGS, hcr_el2);
-	write_sysreg(vectors, vbar_el1);
-}
-
-static void __hyp_text __deactivate_traps_nvhe(void)
-{
-	u64 mdcr_el2 = read_sysreg(mdcr_el2);
-
-	mdcr_el2 &= MDCR_EL2_HPMN_MASK;
-	mdcr_el2 |= MDCR_EL2_E2PB_MASK << MDCR_EL2_E2PB_SHIFT;
-
-	write_sysreg(mdcr_el2, mdcr_el2);
-	write_sysreg(HCR_RW, hcr_el2);
-	write_sysreg(CPTR_EL2_DEFAULT, cptr_el2);
-}
-
-static hyp_alternate_select(__deactivate_traps_arch,
-			    __deactivate_traps_nvhe, __deactivate_traps_vhe,
-			    ARM64_HAS_VIRT_HOST_EXTN);
-
-static void __hyp_text __deactivate_traps(struct kvm_vcpu *vcpu)
-{
 	/*
 	 * If we pended a virtual abort, preserve it until it gets
 	 * cleared. See D1.14.3 (Virtual Interrupts) for details, but
@@ -173,7 +162,14 @@ static void __hyp_text __deactivate_traps(struct kvm_vcpu *vcpu)
 		vcpu->arch.hcr_el2 = read_sysreg(hcr_el2);
 
 	__deactivate_traps_common();
-	__deactivate_traps_arch()();
+
+	mdcr_el2 = read_sysreg(mdcr_el2);
+	mdcr_el2 &= MDCR_EL2_HPMN_MASK;
+	mdcr_el2 |= MDCR_EL2_E2PB_MASK << MDCR_EL2_E2PB_SHIFT;
+
+	write_sysreg(mdcr_el2, mdcr_el2);
+	write_sysreg(HCR_RW, hcr_el2);
+	write_sysreg(CPTR_EL2_DEFAULT, cptr_el2);
 }
 
 static inline void __hyp_text __activate_vm(struct kvm_vcpu *vcpu)
@@ -383,7 +379,7 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	/* Make sure we're using the latest VMID for this VM */
 	write_sysreg(vcpu->kvm->arch.vttbr, vttbr_el2);
 
-	__activate_traps(vcpu);
+	activate_traps_vhe(vcpu);
 
 	__timer_enable_traps(vcpu);
 
@@ -400,7 +396,7 @@ again:
 	sysreg_save_common_state_vhe(guest_ctxt);
 	__timer_disable_traps(vcpu);
 
-	__deactivate_traps(vcpu);
+	deactivate_traps_vhe(vcpu);
 
 	sysreg_restore_common_state_vhe(host_ctxt);
 
@@ -422,7 +418,7 @@ int __hyp_text __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 
 	__sysreg_save_host_state(host_ctxt);
 
-	__activate_traps(vcpu);
+	__activate_traps_nvhe(vcpu);
 	__activate_vm(vcpu);
 
 	__vgic_restore_state(vcpu);
@@ -453,7 +449,7 @@ again:
 	__timer_disable_traps(vcpu);
 	__vgic_save_state(vcpu);
 
-	__deactivate_traps(vcpu);
+	__deactivate_traps_nvhe(vcpu);
 	__deactivate_vm();
 
 	__sysreg_restore_host_state(host_ctxt);
@@ -519,7 +515,10 @@ void __hyp_text __noreturn hyp_panic(struct kvm_cpu_context *__host_ctxt)
 		host_ctxt = kern_hyp_va(__host_ctxt);
 		vcpu = host_ctxt->__hyp_running_vcpu;
 		__timer_disable_traps(vcpu);
-		__deactivate_traps(vcpu);
+		if (has_vhe())
+			deactivate_traps_vhe(vcpu);
+		else
+			__deactivate_traps_nvhe(vcpu);
 		__deactivate_vm();
 		__sysreg_restore_host_state(host_ctxt);
 	}
