@@ -378,7 +378,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 
 	__activate_traps(vcpu);
 
-	__vgic_restore_state(vcpu);
 	__timer_enable_traps(vcpu);
 
 	sysreg_restore_common_state_vhe(guest_ctxt);
@@ -393,7 +392,6 @@ again:
 
 	sysreg_save_common_state_vhe(guest_ctxt);
 	__timer_disable_traps(vcpu);
-	__vgic_save_state(vcpu);
 
 	__deactivate_traps(vcpu);
 
