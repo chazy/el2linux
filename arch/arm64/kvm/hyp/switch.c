@@ -392,8 +392,6 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	activate_traps_vhe(vcpu);
 	__activate_vm(vcpu);
 
-	__vgic_restore_state(vcpu);
-
 	__debug_switch_to_guest(vcpu);
 
 	/* Jump in the fire! */
@@ -403,8 +401,6 @@ again:
 
 	if (fixup_guest_exit(vcpu, &exit_code))
 		goto again;
-
-	__vgic_save_state(vcpu);
 
 	deactivate_traps_vhe(vcpu);
 
