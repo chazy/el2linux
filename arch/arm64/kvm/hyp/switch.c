@@ -435,7 +435,7 @@ void __hyp_text __noreturn hyp_panic(struct kvm_cpu_context *__host_ctxt)
 	if (read_sysreg(vttbr_el2)) {
 		struct kvm_cpu_context *host_ctxt;
 
-		host_ctxt = kern_hyp_va(__host_ctxt);
+		host_ctxt = __host_ctxt;
 		vcpu = host_ctxt->__hyp_running_vcpu;
 		__timer_disable_traps(vcpu);
 		__deactivate_traps(vcpu);
