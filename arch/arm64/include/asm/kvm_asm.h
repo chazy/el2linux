@@ -70,4 +70,24 @@ extern u32 __init_stage2_translation(void);
 
 #endif
 
+#ifdef __ASSEMBLY__
+.macro get_host_ctxt reg, tmp
+	/*
+	 * '=kvm_host_cpu_state' is a host VA from the constant pool, it may
+	 * not be accessible by this address from EL2, hyp_panic() converts
+	 * it with kern_hyp_va() before use.
+	 */
+	ldr	\reg, =kvm_host_cpu_state
+	mrs	\tmp, tpidr_el2
+	add	\reg, \reg, \tmp
+	kern_hyp_va \reg
+.endm
+
+.macro get_vcpu vcpu, ctxt
+	ldr	\vcpu, [\ctxt, #HOST_CONTEXT_VCPU]
+	kern_hyp_va	\vcpu
+.endm
+
+#endif
+
 #endif /* __ARM_KVM_ASM_H__ */
