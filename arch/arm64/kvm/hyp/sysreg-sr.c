@@ -69,17 +69,15 @@ static void __hyp_text __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 	__sysreg_save_user_state(ctxt);
 }
 
-static void __hyp_text __sysreg_save_el2_return_state(struct kvm_cpu_context *ctxt)
-{
-	ctxt->gp_regs.regs.pc		= read_sysreg_el2(elr);
-	ctxt->gp_regs.regs.pstate	= read_sysreg_el2(spsr);
-}
-
 void __hyp_text __sysreg_save_state_nvhe(struct kvm_cpu_context *ctxt)
 {
 	__sysreg_save_el1_state(ctxt);
-	__sysreg_save_el2_return_state(ctxt);
 
+	/* Save EL2 return state */
+	ctxt->gp_regs.regs.pc		= read_sysreg_el2(elr);
+	ctxt->gp_regs.regs.pstate	= read_sysreg_el2(spsr);
+
+	/* Save registers shared between the host and the guest */
 	ctxt->sys_regs[MDSCR_EL1]	= read_sysreg(mdscr_el1);
 	ctxt->gp_regs.regs.sp		= read_sysreg(sp_el0);
 }
@@ -119,18 +117,15 @@ static void __hyp_text __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt)
 	__sysreg_restore_user_state(ctxt);
 }
 
-static void __hyp_text
-__sysreg_restore_el2_return_state(struct kvm_cpu_context *ctxt)
-{
-	write_sysreg_el2(ctxt->gp_regs.regs.pc,     elr);
-	write_sysreg_el2(ctxt->gp_regs.regs.pstate, spsr);
-}
-
 void __hyp_text __sysreg_restore_state_nvhe(struct kvm_cpu_context *ctxt)
 {
 	__sysreg_restore_el1_state(ctxt);
-	__sysreg_restore_el2_return_state(ctxt);
 
+	/* Restore EL2 return state */
+	write_sysreg_el2(ctxt->gp_regs.regs.pc,     elr);
+	write_sysreg_el2(ctxt->gp_regs.regs.pstate, spsr);
+
+	/* Restore registers shared between the host and the guest */
 	write_sysreg(ctxt->sys_regs[MDSCR_EL1],	  mdscr_el1);
 	write_sysreg(ctxt->gp_regs.regs.sp,	  sp_el0);
 }
