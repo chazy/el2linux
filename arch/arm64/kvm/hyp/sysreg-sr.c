@@ -65,13 +65,12 @@ static void __hyp_text __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 	ctxt->gp_regs.sp_el1		= read_sysreg(sp_el1);
 	ctxt->gp_regs.elr_el1		= read_sysreg_el1(elr);
 	ctxt->gp_regs.spsr[KVM_SPSR_EL1]= read_sysreg_el1(spsr);
-
-	__sysreg_save_user_state(ctxt);
 }
 
 void __hyp_text __sysreg_save_state_nvhe(struct kvm_cpu_context *ctxt)
 {
 	__sysreg_save_el1_state(ctxt);
+	__sysreg_save_user_state(ctxt);
 
 	/* Save EL2 return state */
 	ctxt->gp_regs.regs.pc		= read_sysreg_el2(elr);
@@ -113,13 +112,12 @@ static void __hyp_text __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt)
 	write_sysreg(ctxt->gp_regs.sp_el1,		sp_el1);
 	write_sysreg_el1(ctxt->gp_regs.elr_el1,		elr);
 	write_sysreg_el1(ctxt->gp_regs.spsr[KVM_SPSR_EL1],spsr);
-
-	__sysreg_restore_user_state(ctxt);
 }
 
 void __hyp_text __sysreg_restore_state_nvhe(struct kvm_cpu_context *ctxt)
 {
 	__sysreg_restore_el1_state(ctxt);
+	__sysreg_restore_user_state(ctxt);
 
 	/* Restore EL2 return state */
 	write_sysreg_el2(ctxt->gp_regs.regs.pc,     elr);
@@ -282,6 +280,7 @@ void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
 	 */
 	__sysreg32_restore_state(vcpu);
 	__sysreg_restore_el1_state(guest_ctxt);
+	__sysreg_restore_user_state(guest_ctxt);
 	vcpu->arch.ctxt.sysregs_loaded_on_cpu = true;
 
 	activate_traps_vhe_load(vcpu);
@@ -319,6 +318,7 @@ void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
 
 	/* Save guest EL1 and user state */
 	__sysreg_save_el1_state(guest_ctxt);
+	__sysreg_save_user_state(guest_ctxt);
 	__sysreg32_save_state(vcpu);
 
 	/* Restore host user state */
