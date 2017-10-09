@@ -134,10 +134,8 @@ void __timer_disable_traps(struct kvm_vcpu *vcpu);
 
 void sysreg_save_common_state_vhe(struct kvm_cpu_context *ctxt);
 void sysreg_restore_common_state_vhe(struct kvm_cpu_context *ctxt);
-void __sysreg_save_host_state(struct kvm_cpu_context *ctxt);
-void __sysreg_restore_host_state(struct kvm_cpu_context *ctxt);
-void __sysreg_save_guest_state(struct kvm_cpu_context *ctxt);
-void __sysreg_restore_guest_state(struct kvm_cpu_context *ctxt);
+void __sysreg_save_state_nvhe(struct kvm_cpu_context *ctxt);
+void __sysreg_restore_state_nvhe(struct kvm_cpu_context *ctxt);
 void __sysreg32_save_state(struct kvm_vcpu *vcpu);
 void __sysreg32_restore_state(struct kvm_vcpu *vcpu);
 
