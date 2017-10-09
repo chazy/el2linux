@@ -33,23 +33,6 @@
  * switched when potentially going to run a different VCPU.  The latter two
  * classes are handled as part of kvm_arch_vcpu_load/put}.
  */
-void sysreg_save_common_state_vhe(struct kvm_cpu_context *ctxt)
-{
-	ctxt->sys_regs[MDSCR_EL1]	= read_sysreg(mdscr_el1);
-	ctxt->gp_regs.regs.sp		= read_sysreg(sp_el0);
-}
-
-void sysreg_restore_common_state_vhe(struct kvm_cpu_context *ctxt)
-{
-	write_sysreg(ctxt->sys_regs[MDSCR_EL1],	  mdscr_el1);
-	write_sysreg(ctxt->gp_regs.regs.sp,	  sp_el0);
-}
-
-static void __hyp_text __sysreg_save_common_state(struct kvm_cpu_context *ctxt)
-{
-	ctxt->sys_regs[MDSCR_EL1]	= read_sysreg(mdscr_el1);
-	ctxt->gp_regs.regs.sp		= read_sysreg(sp_el0);
-}
 
 static void __hyp_text __sysreg_save_user_state(struct kvm_cpu_context *ctxt)
 {
@@ -95,14 +78,10 @@ static void __hyp_text __sysreg_save_el2_return_state(struct kvm_cpu_context *ct
 void __hyp_text __sysreg_save_state_nvhe(struct kvm_cpu_context *ctxt)
 {
 	__sysreg_save_el1_state(ctxt);
-	__sysreg_save_common_state(ctxt);
 	__sysreg_save_el2_return_state(ctxt);
-}
 
-static void __hyp_text __sysreg_restore_common_state(struct kvm_cpu_context *ctxt)
-{
-	write_sysreg(ctxt->sys_regs[MDSCR_EL1],	  mdscr_el1);
-	write_sysreg(ctxt->gp_regs.regs.sp,	  sp_el0);
+	ctxt->sys_regs[MDSCR_EL1]	= read_sysreg(mdscr_el1);
+	ctxt->gp_regs.regs.sp		= read_sysreg(sp_el0);
 }
 
 static void __hyp_text __sysreg_restore_user_state(struct kvm_cpu_context *ctxt)
@@ -150,8 +129,10 @@ __sysreg_restore_el2_return_state(struct kvm_cpu_context *ctxt)
 void __hyp_text __sysreg_restore_state_nvhe(struct kvm_cpu_context *ctxt)
 {
 	__sysreg_restore_el1_state(ctxt);
-	__sysreg_restore_common_state(ctxt);
 	__sysreg_restore_el2_return_state(ctxt);
+
+	write_sysreg(ctxt->sys_regs[MDSCR_EL1],	  mdscr_el1);
+	write_sysreg(ctxt->gp_regs.regs.sp,	  sp_el0);
 }
 
 static void __hyp_text __fpsimd32_save_state(struct kvm_cpu_context *ctxt)

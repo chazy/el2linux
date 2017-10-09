@@ -354,6 +354,32 @@ static bool __hyp_text fixup_guest_exit(struct kvm_vcpu *vcpu, u64 *exit_code)
 	return false;
 }
 
+static inline void sysreg_shared_switch_to_guest_vhe(struct kvm_vcpu *vcpu)
+{
+	struct kvm_cpu_context *host_ctxt = vcpu->arch.host_cpu_context;
+	struct kvm_cpu_context *guest_ctxt = &vcpu->arch.ctxt;
+
+	/* Switch MDSCR_EL1 and SP_EL0 */
+	host_ctxt->sys_regs[MDSCR_EL1] = read_sysreg(mdscr_el1);
+	write_sysreg(guest_ctxt->sys_regs[MDSCR_EL1], mdscr_el1);
+
+	host_ctxt->gp_regs.regs.sp = read_sysreg(sp_el0);
+	write_sysreg(guest_ctxt->gp_regs.regs.sp, sp_el0);
+}
+
+static inline void sysreg_shared_switch_to_host_vhe(struct kvm_vcpu *vcpu)
+{
+	struct kvm_cpu_context *host_ctxt = vcpu->arch.host_cpu_context;
+	struct kvm_cpu_context *guest_ctxt = &vcpu->arch.ctxt;
+
+	/* Switch MDSCR_EL1 and SP_EL0 back again */
+	guest_ctxt->sys_regs[MDSCR_EL1] = read_sysreg(mdscr_el1);
+	write_sysreg(host_ctxt->sys_regs[MDSCR_EL1], mdscr_el1);
+
+	guest_ctxt->gp_regs.regs.sp = read_sysreg(sp_el0);
+	write_sysreg(host_ctxt->gp_regs.regs.sp, sp_el0);
+}
+
 /* Switch to the guest for VHE systems running in EL2 */
 int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 {
@@ -365,14 +391,13 @@ int kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	host_ctxt->__hyp_running_vcpu = vcpu;
 	guest_ctxt = &vcpu->arch.ctxt;
 
-	sysreg_save_common_state_vhe(host_ctxt);
+	sysreg_shared_switch_to_guest_vhe(vcpu);
 
 	activate_traps_vhe(vcpu);
 	__activate_vm(vcpu);
 
 	__vgic_restore_state(vcpu);
 
-	sysreg_restore_common_state_vhe(guest_ctxt);
 	__debug_switch_to_guest(vcpu);
 
 	/* Jump in the fire! */
@@ -383,12 +408,11 @@ again:
 	if (fixup_guest_exit(vcpu, &exit_code))
 		goto again;
 
-	sysreg_save_common_state_vhe(guest_ctxt);
 	__vgic_save_state(vcpu);
 
 	deactivate_traps_vhe(vcpu);
 
-	sysreg_restore_common_state_vhe(host_ctxt);
+	sysreg_shared_switch_to_host_vhe(vcpu);
 
 	/*
 	 * This must come after restoring the host sysregs, since a non-VHE
@@ -492,7 +516,7 @@ static void __hyp_call_panic_vhe(u64 spsr, u64 elr, u64 par,
 	vcpu = host_ctxt->__hyp_running_vcpu;
 
 	deactivate_traps_vhe(vcpu);
-	sysreg_restore_common_state_vhe(host_ctxt);
+	sysreg_shared_switch_to_host_vhe(vcpu);
 
 	panic(__hyp_panic_string,
 	      spsr,  elr,
