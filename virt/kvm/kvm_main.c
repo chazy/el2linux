@@ -147,12 +147,13 @@ bool kvm_is_reserved_pfn(kvm_pfn_t pfn)
 /*
  * Switches to specified vcpu, until a matching vcpu_put()
  */
-int vcpu_load(struct kvm_vcpu *vcpu)
+int vcpu_load(struct kvm_vcpu *vcpu, unsigned int ioctl)
 {
 	int cpu;
 
 	if (mutex_lock_killable(&vcpu->mutex))
 		return -EINTR;
+	vcpu->ioctl = ioctl;
 	cpu = get_cpu();
 	preempt_notifier_register(&vcpu->preempt_notifier);
 	kvm_arch_vcpu_load(vcpu, cpu);
@@ -2529,7 +2530,7 @@ static long kvm_vcpu_ioctl(struct file *filp,
 #endif
 
 
-	r = vcpu_load(vcpu);
+	r = vcpu_load(vcpu, ioctl);
 	if (r)
 		return r;
 	switch (ioctl) {
@@ -2704,6 +2705,7 @@ out_free1:
 	}
 out:
 	vcpu_put(vcpu);
+	vcpu->ioctl = 0;
 	kfree(fpu);
 	kfree(kvm_sregs);
 	return r;

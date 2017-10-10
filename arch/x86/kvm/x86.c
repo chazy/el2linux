@@ -7723,7 +7723,7 @@ int kvm_arch_vcpu_setup(struct kvm_vcpu *vcpu)
 	int r;
 
 	kvm_vcpu_mtrr_init(vcpu);
-	r = vcpu_load(vcpu);
+	r = vcpu_load(vcpu, vcpu->ioctl);
 	if (r)
 		return r;
 	kvm_vcpu_reset(vcpu, false);
@@ -7739,7 +7739,7 @@ void kvm_arch_vcpu_postcreate(struct kvm_vcpu *vcpu)
 
 	kvm_hv_vcpu_postcreate(vcpu);
 
-	if (vcpu_load(vcpu))
+	if (vcpu_load(vcpu, vcpu->ioctl))
 		return;
 	msr.data = 0x0;
 	msr.index = MSR_IA32_TSC;
@@ -7759,7 +7759,7 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	int r;
 	vcpu->arch.apf.msr_val = 0;
 
-	r = vcpu_load(vcpu);
+	r = vcpu_load(vcpu, vcpu->ioctl);
 	BUG_ON(r);
 	kvm_mmu_unload(vcpu);
 	vcpu_put(vcpu);
@@ -8116,7 +8116,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 static void kvm_unload_vcpu_mmu(struct kvm_vcpu *vcpu)
 {
 	int r;
-	r = vcpu_load(vcpu);
+	r = vcpu_load(vcpu, vcpu->ioctl);
 	BUG_ON(r);
 	kvm_mmu_unload(vcpu);
 	vcpu_put(vcpu);
