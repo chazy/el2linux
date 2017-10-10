@@ -183,3 +183,30 @@ void __hyp_text __sysreg32_restore_state(struct kvm_vcpu *vcpu)
 	if (vcpu->arch.debug_flags & KVM_ARM64_DEBUG_DIRTY)
 		write_sysreg(sysreg[DBGVCR32_EL2], dbgvcr32_el2);
 }
+
+/**
+ * kvm_vcpu_load_sysregs - Load guest system register to physical CPU
+ *
+ * @vcpu: The VCPU pointer
+ *
+ * If the kernel runs in EL2 then load the system register state for the VCPU
+ * for EL1 onto the physical CPU so that we can go back and foward between the
+ * VM and the hypervisor without switching all this state around.
+ */
+void kvm_vcpu_load_sysregs(struct kvm_vcpu *vcpu)
+{
+}
+
+/**
+ * kvm_vcpu_put_sysregs - Restore host system register state to physical CPU
+ *
+ * @vcpu: The VCPU pointer
+ *
+ * If the kernel runs in EL2 and the physical register state belongs to the
+ * VCPU, then restore the system register state for the host for EL1 onto the
+ * physical CPU so that we can run userspace and other threads on this
+ * physical CPU.
+ */
+void kvm_vcpu_put_sysregs(struct kvm_vcpu *vcpu)
+{
+}
