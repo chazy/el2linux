@@ -338,6 +338,9 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 {
 	int *last_ran;
 
+	if (vcpu->ioctl != KVM_RUN)
+		return;
+
 	last_ran = this_cpu_ptr(vcpu->kvm->arch.last_vcpu_ran);
 
 	/*
@@ -359,6 +362,9 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
+	if (vcpu->ioctl != KVM_RUN)
+		return;
+
 	kvm_timer_vcpu_put(vcpu);
 	kvm_vgic_put(vcpu);
 
