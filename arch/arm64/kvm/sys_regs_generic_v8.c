@@ -38,7 +38,10 @@ static bool access_actlr(struct kvm_vcpu *vcpu,
 	if (p->is_write)
 		return ignore_write(vcpu, p);
 
-	p->regval = vcpu_sys_reg(vcpu, ACTLR_EL1);
+	if (vcpu->arch.sysregs_loaded_on_cpu)
+		read_sysreg(actlr_el1);
+	else
+		p->regval = vcpu_sys_reg(vcpu, ACTLR_EL1);
 	return true;
 }
 
