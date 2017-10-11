@@ -34,6 +34,7 @@
 #include <asm/kvm_coproc.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_host.h>
+#include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
 #include <asm/perf_event.h>
 #include <asm/sysreg.h>
@@ -110,8 +111,53 @@ static bool access_dcsw(struct kvm_vcpu *vcpu,
 	return true;
 }
 
+static u64 read_deferrable_vm_reg(struct kvm_vcpu *vcpu, int reg)
+{
+	if (vcpu->arch.sysregs_loaded_on_cpu) {
+		switch (reg) {
+		case SCTLR_EL1:		return read_sysreg_el1(sctlr);
+		case TTBR0_EL1:		return read_sysreg_el1(ttbr0);
+		case TTBR1_EL1:		return read_sysreg_el1(ttbr1);
+		case TCR_EL1:		return read_sysreg_el1(tcr);
+		case ESR_EL1:		return read_sysreg_el1(esr);
+		case FAR_EL1:		return read_sysreg_el1(far);
+		case AFSR0_EL1:		return read_sysreg_el1(afsr0);
+		case AFSR1_EL1:		return read_sysreg_el1(afsr1);
+		case MAIR_EL1:		return read_sysreg_el1(mair);
+		case AMAIR_EL1:		return read_sysreg_el1(amair);
+		case CONTEXTIDR_EL1:	return read_sysreg_el1(contextidr);
+		default:		BUG();
+		}
+	}
+
+	return vcpu_sys_reg(vcpu, reg);
+}
+
+static void write_deferrable_vm_reg(struct kvm_vcpu *vcpu, int reg, u64 val)
+{
+	if (vcpu->arch.sysregs_loaded_on_cpu) {
+		switch (reg) {
+		case SCTLR_EL1:		write_sysreg_el1(val, sctlr);	return;
+		case TTBR0_EL1:		write_sysreg_el1(val, ttbr0);	return;
+		case TTBR1_EL1:		write_sysreg_el1(val, ttbr1);	return;
+		case TCR_EL1:		write_sysreg_el1(val, tcr);	return;
+		case ESR_EL1:		write_sysreg_el1(val, esr);	return;
+		case FAR_EL1:		write_sysreg_el1(val, far);	return;
+		case AFSR0_EL1:		write_sysreg_el1(val, afsr0);	return;
+		case AFSR1_EL1:		write_sysreg_el1(val, afsr1);	return;
+		case MAIR_EL1:		write_sysreg_el1(val, mair);	return;
+		case AMAIR_EL1:		write_sysreg_el1(val, amair);	return;
+		case CONTEXTIDR_EL1:	write_sysreg_el1(val, contextidr); return;
+		default:		BUG();
+		}
+	}
+
+	vcpu_sys_reg(vcpu, reg) = val;
+}
+
 /*
  * Generic accessor for VM registers. Only called as long as HCR_TVM
+ *
  * is set. If the guest enables the MMU, we stop trapping the VM
  * sys_regs and leave it in complete control of the caches.
  */
@@ -129,13 +175,15 @@ static bool access_vm_reg(struct kvm_vcpu *vcpu,
 	if (p->is_aarch32)
 		reg = r->reg / 2;
 
+	BUG_ON(!p->is_write);
+
 	if (!p->is_aarch32 || !p->is_32bit) {
 		val = p->regval;
 	} else {
-		val = vcpu_sys_reg(vcpu, reg);
+		val = read_deferrable_vm_reg(vcpu, reg);
 		val = (val & GENMASK_ULL(63, 32)) | lower_32_bits(p->regval);
 	}
-	vcpu_sys_reg(vcpu, reg) = val;
+	write_deferrable_vm_reg(vcpu, reg, val);
 
 	kvm_toggle_cache(vcpu, was_enabled);
 	return true;
