@@ -59,8 +59,17 @@ static void vcpu_set_elr_el1(struct kvm_vcpu *vcpu, u64 val)
 /* Set the SPSR for the current mode */
 static void vcpu_set_spsr(struct kvm_vcpu *vcpu, u64 val)
 {
-	if (vcpu_mode_is_32bit(vcpu))
+	if (vcpu_mode_is_32bit(vcpu)) {
+		if (vcpu->arch.sysregs_loaded_on_cpu)
+			__sysreg32_save_state(vcpu);
+
 		*vcpu_spsr32(vcpu) = val;
+
+		if (vcpu->arch.sysregs_loaded_on_cpu)
+			__sysreg32_restore_state(vcpu);
+
+		return;
+	}
 
 	if (vcpu->arch.sysregs_loaded_on_cpu)
 		write_sysreg_el1(val, spsr);
@@ -129,11 +138,13 @@ static void inject_abt32(struct kvm_vcpu *vcpu, bool is_pabt,
 	 *   IFAR:  mapped to FAR_EL1
 	 *   DFSR:  mapped to ESR_EL1
 	 *   TTBCR: mapped to TCR_EL1
+	 *   IFSR:  stored in IFSR32_EL2
 	 */
 	if (vcpu->arch.sysregs_loaded_on_cpu) {
 		vcpu->arch.ctxt.sys_regs[FAR_EL1] = read_sysreg_el1(far);
 		vcpu->arch.ctxt.sys_regs[ESR_EL1] = read_sysreg_el1(esr);
 		vcpu->arch.ctxt.sys_regs[TCR_EL1] = read_sysreg_el1(tcr);
+		vcpu->arch.ctxt.sys_regs[IFSR32_EL2] = read_sysreg(ifsr32_el2);
 	}
 
 	if (is_pabt) {
@@ -161,6 +172,7 @@ static void inject_abt32(struct kvm_vcpu *vcpu, bool is_pabt,
 	if (vcpu->arch.sysregs_loaded_on_cpu) {
 		write_sysreg_el1(vcpu->arch.ctxt.sys_regs[FAR_EL1], far);
 		write_sysreg_el1(vcpu->arch.ctxt.sys_regs[ESR_EL1], esr);
+		write_sysreg(vcpu->arch.ctxt.sys_regs[IFSR32_EL2], ifsr32_el2);
 	}
 }
 
