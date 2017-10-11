@@ -86,12 +86,16 @@ static u32 cache_levels;
 static u32 get_ccsidr(u32 csselr)
 {
 	u32 ccsidr;
+	u32 csselr_preserve;
 
-	/* Make sure noone else changes CSSELR during this! */
+	/* Make sure noone else changes CSSELR during this and preserve any
+	 * existing value in the CSSELR! */
 	local_irq_disable();
+	csselr_preserve = read_sysreg(csselr_el1);
 	write_sysreg(csselr, csselr_el1);
 	isb();
 	ccsidr = read_sysreg(ccsidr_el1);
+	write_sysreg(csselr_preserve, csselr_el1);
 	local_irq_enable();
 
 	return ccsidr;

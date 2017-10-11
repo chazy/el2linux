@@ -23,6 +23,7 @@
 
 #include <linux/kvm_host.h>
 #include <asm/kvm_emulate.h>
+#include <asm/kvm_hyp.h>
 #include <asm/esr.h>
 
 #define PSTATE_FAULT_BITS_64 	(PSR_MODE_EL1h | PSR_A_BIT | PSR_F_BIT | \
@@ -33,13 +34,55 @@
 #define LOWER_EL_AArch64_VECTOR		0x400
 #define LOWER_EL_AArch32_VECTOR		0x600
 
+static u64 vcpu_get_vbar_el1(struct kvm_vcpu *vcpu)
+{
+	unsigned long vbar;
+
+	if (vcpu->arch.sysregs_loaded_on_cpu)
+		vbar = read_sysreg_el1(vbar);
+	else
+		vbar = vcpu_sys_reg(vcpu, VBAR_EL1);
+
+	if (vcpu_el1_is_32bit(vcpu))
+		return lower_32_bits(vbar);
+	return vbar;
+}
+
+static void vcpu_set_elr_el1(struct kvm_vcpu *vcpu, u64 val)
+{
+	if (vcpu->arch.sysregs_loaded_on_cpu)
+		write_sysreg_el1(val, elr);
+	else
+		vcpu_gp_regs(vcpu)->elr_el1 = val;
+}
+
+/* Set the SPSR for the current mode */
+static void vcpu_set_spsr(struct kvm_vcpu *vcpu, u64 val)
+{
+	if (vcpu_mode_is_32bit(vcpu))
+		*vcpu_spsr32(vcpu) = val;
+
+	if (vcpu->arch.sysregs_loaded_on_cpu)
+		write_sysreg_el1(val, spsr);
+	else
+		vcpu_gp_regs(vcpu)->spsr[KVM_SPSR_EL1] = val;
+}
+
+static u32 vcpu_get_c1_sctlr(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->arch.sysregs_loaded_on_cpu)
+		return lower_32_bits(read_sysreg_el1(sctlr));
+	else
+		return vcpu_cp15(vcpu, c1_SCTLR);
+}
+
 static void prepare_fault32(struct kvm_vcpu *vcpu, u32 mode, u32 vect_offset)
 {
 	unsigned long cpsr;
 	unsigned long new_spsr_value = *vcpu_cpsr(vcpu);
 	bool is_thumb = (new_spsr_value & COMPAT_PSR_T_BIT);
 	u32 return_offset = (is_thumb) ? 4 : 0;
-	u32 sctlr = vcpu_cp15(vcpu, c1_SCTLR);
+	u32 sctlr = vcpu_get_c1_sctlr(vcpu);
 
 	cpsr = mode | COMPAT_PSR_I_BIT;
 
@@ -51,14 +94,14 @@ static void prepare_fault32(struct kvm_vcpu *vcpu, u32 mode, u32 vect_offset)
 	*vcpu_cpsr(vcpu) = cpsr;
 
 	/* Note: These now point to the banked copies */
-	*vcpu_spsr(vcpu) = new_spsr_value;
+	vcpu_set_spsr(vcpu, new_spsr_value);
 	*vcpu_reg32(vcpu, 14) = *vcpu_pc(vcpu) + return_offset;
 
 	/* Branch to exception vector */
 	if (sctlr & (1 << 13))
 		vect_offset += 0xffff0000;
 	else /* always have security exceptions */
-		vect_offset += vcpu_cp15(vcpu, c12_VBAR);
+		vect_offset += vcpu_get_vbar_el1(vcpu);
 
 	*vcpu_pc(vcpu) = vect_offset;
 }
@@ -78,6 +121,20 @@ static void inject_abt32(struct kvm_vcpu *vcpu, bool is_pabt,
 	u32 vect_offset;
 	u32 *far, *fsr;
 	bool is_lpae;
+
+	/*
+	 * We are going to need the latest values of the following system
+	 * regiters:
+	 *   DFAR:  mapped to FAR_EL1
+	 *   IFAR:  mapped to FAR_EL1
+	 *   DFSR:  mapped to ESR_EL1
+	 *   TTBCR: mapped to TCR_EL1
+	 */
+	if (vcpu->arch.sysregs_loaded_on_cpu) {
+		vcpu->arch.ctxt.sys_regs[FAR_EL1] = read_sysreg_el1(far);
+		vcpu->arch.ctxt.sys_regs[ESR_EL1] = read_sysreg_el1(esr);
+		vcpu->arch.ctxt.sys_regs[TCR_EL1] = read_sysreg_el1(tcr);
+	}
 
 	if (is_pabt) {
 		vect_offset = 12;
@@ -99,6 +156,12 @@ static void inject_abt32(struct kvm_vcpu *vcpu, bool is_pabt,
 		*fsr = 1 << 9 | 0x34;
 	else
 		*fsr = 0x14;
+
+	/* Sync back any registers we may have changed */
+	if (vcpu->arch.sysregs_loaded_on_cpu) {
+		write_sysreg_el1(vcpu->arch.ctxt.sys_regs[FAR_EL1], far);
+		write_sysreg_el1(vcpu->arch.ctxt.sys_regs[ESR_EL1], esr);
+	}
 }
 
 enum exception_type {
@@ -126,7 +189,7 @@ static u64 get_except_vector(struct kvm_vcpu *vcpu, enum exception_type type)
 		exc_offset = LOWER_EL_AArch32_VECTOR;
 	}
 
-	return vcpu_sys_reg(vcpu, VBAR_EL1) + exc_offset + type;
+	return vcpu_get_vbar_el1(vcpu) + exc_offset + type;
 }
 
 static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr)
@@ -135,11 +198,11 @@ static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr
 	bool is_aarch32 = vcpu_mode_is_32bit(vcpu);
 	u32 esr = 0;
 
-	*vcpu_elr_el1(vcpu) = *vcpu_pc(vcpu);
+	vcpu_set_elr_el1(vcpu, *vcpu_pc(vcpu));
 	*vcpu_pc(vcpu) = get_except_vector(vcpu, except_type_sync);
 
 	*vcpu_cpsr(vcpu) = PSTATE_FAULT_BITS_64;
-	*vcpu_spsr(vcpu) = cpsr;
+	vcpu_set_spsr(vcpu, cpsr);
 
 	vcpu_sys_reg(vcpu, FAR_EL1) = addr;
 
@@ -170,11 +233,11 @@ static void inject_undef64(struct kvm_vcpu *vcpu)
 	unsigned long cpsr = *vcpu_cpsr(vcpu);
 	u32 esr = (ESR_ELx_EC_UNKNOWN << ESR_ELx_EC_SHIFT);
 
-	*vcpu_elr_el1(vcpu) = *vcpu_pc(vcpu);
+	vcpu_set_elr_el1(vcpu, *vcpu_pc(vcpu));
 	*vcpu_pc(vcpu) = get_except_vector(vcpu, except_type_sync);
 
 	*vcpu_cpsr(vcpu) = PSTATE_FAULT_BITS_64;
-	*vcpu_spsr(vcpu) = cpsr;
+	vcpu_set_spsr(vcpu, cpsr);
 
 	/*
 	 * Build an unknown exception, depending on the instruction
